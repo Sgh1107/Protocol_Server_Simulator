@@ -1,0 +1,330 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProtoSim 场景 / 点表配置包",
+  "description": "一个配置包描述站点设备、信号点、协议绑定、端点、故障剧本与控制 API。schemaVersion 必须存在，便于后续迁移。语义约束（binding 的 protocol 必须有对应 endpoint、deviceId 必须存在、地址不重叠等）由应用层校验，JSON Schema 只负责结构与取值域。",
+  "type": "object",
+  "required": ["schemaVersion", "meta", "devices", "signals", "endpoints"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$",
+      "description": "配置包结构版本，例如 1.0；迁移时据此路由"
+    },
+    "meta": { "$ref": "#/$defs/meta" },
+    "devices": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/device" }
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/signal" }
+    },
+    "endpoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/endpoint" }
+    },
+    "faults": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fault" }
+    },
+    "controlApi": { "$ref": "#/$defs/controlApi" }
+  },
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "required": ["name", "seed", "tickMs"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "seed": {
+          "type": "integer",
+          "description": "确定性随机种子；同一种子 + 同一场景必须逐帧可复现"
+        },
+        "tickMs": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 10000,
+          "default": 100,
+          "description": "仿真引擎统一时钟周期；所有协议共享此时标源"
+        },
+        "timeSource": {
+          "enum": ["simulation", "system"],
+          "default": "simulation",
+          "description": "simulation=虚拟时钟（可暂停/单步/倍速）；system=系统时钟"
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "type": { "type": "string", "description": "设备类型，自由文本，如 IED / RTU / PLC" }
+      }
+    },
+    "range": {
+      "type": "object",
+      "required": ["min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "min": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "description": "数据源行为。各 type 所需参数由应用层做语义校验，Schema 只约束取值域。",
+      "properties": {
+        "type": {
+          "enum": ["constant", "sine", "randomWalk", "ramp", "stepSequence", "csvReplay", "script", "forced"]
+        },
+        "value": { "description": "constant 的初值；类型由 signal.dataType 决定" },
+        "amplitude": { "type": "number", "description": "sine 幅值" },
+        "periodMs": { "type": "integer", "minimum": 1, "description": "sine 周期" },
+        "phaseDeg": { "type": "number", "description": "sine 初相（度）" },
+        "min": { "type": "number", "description": "钳位下限 / randomWalk 下界" },
+        "max": { "type": "number", "description": "钳位上限 / randomWalk 上界" },
+        "step": { "type": "number", "description": "ramp 步长 / randomWalk 单步增量上限" },
+        "intervalMs": { "type": "integer", "minimum": 1, "description": "ramp / randomWalk 更新间隔" },
+        "sequence": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "stepSequence 的取值序列"
+        },
+        "csvPath": { "type": "string", "description": "csvReplay 的曲线文件（配置包内相对路径）" },
+        "script": { "type": "string", "description": "script 的 QJSEngine 源码或配置包内相对路径" },
+        "forcedValue": { "description": "forced 的手工强制值，需带强制标记并写入审计" }
+      }
+    },
+    "reserved61850": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "IEC 61850 预留字段，P0 不实现但必须存在，避免后期改 schema",
+      "properties": {
+        "iedPath": { "type": "string", "description": "LD/LN/DO/DA 路径" },
+        "fc": { "type": "string", "description": "功能约束 FC" },
+        "dataSet": { "type": "string" },
+        "reportControlBlock": { "type": "string" },
+        "mmsType": { "type": "string" }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "required": ["id", "name", "deviceId", "category", "dataType", "behavior", "bindings"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "deviceId": { "type": "string", "minLength": 1, "description": "必须引用 devices[].id" },
+        "description": { "type": "string" },
+        "category": {
+          "enum": ["AI", "DI", "AO", "DO", "telemetry", "telesignal", "telecontrol", "teleadjust", "setting", "metering"]
+        },
+        "dataType": {
+          "enum": ["bool", "uint16", "int16", "uint32", "int32", "float32", "float64", "ascii"]
+        },
+        "byteOrder": {
+          "enum": ["ABCD", "DCBA", "BADC", "CDAB"],
+          "default": "ABCD"
+        },
+        "scale": { "type": "number", "default": 1.0 },
+        "offset": { "type": "number", "default": 0.0 },
+        "unit": { "type": "string" },
+        "range": { "$ref": "#/$defs/range" },
+        "quality": {
+          "enum": ["Good", "Bad", "Timeout", "OutOfRange", "Unknown"],
+          "default": "Good"
+        },
+        "behavior": { "$ref": "#/$defs/behavior" },
+        "bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/binding" },
+          "description": "一个信号可同时挂 N 个协议绑定，实现「一个实时库，多协议同时对外」"
+        },
+        "reserved61850": { "$ref": "#/$defs/reserved61850" }
+      }
+    },
+    "binding": {
+      "oneOf": [
+        { "$ref": "#/$defs/bindingModbus" },
+        { "$ref": "#/$defs/bindingIec104" },
+        { "$ref": "#/$defs/bindingMqtt" },
+        { "$ref": "#/$defs/bindingIec61850" }
+      ]
+    },
+    "bindingModbus": {
+      "type": "object",
+      "required": ["protocol", "unitId", "registerType", "address"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "modbus" },
+        "unitId": { "type": "integer", "minimum": 0, "maximum": 247 },
+        "registerType": { "enum": ["Coils", "DiscreteInputs", "HoldingRegisters", "InputRegisters"] },
+        "address": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "count": { "type": "integer", "minimum": 1, "default": 1, "description": "占用寄存器/线圈数量" },
+        "fcOverride": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 127,
+          "description": "可选：覆写默认功能码，供自定义功能码测试"
+        }
+      }
+    },
+    "bindingIec104": {
+      "type": "object",
+      "required": ["protocol", "asduType", "commonAddress", "infoObjectAddress"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "iec104" },
+        "asduType": { "type": "integer", "minimum": 1, "maximum": 127 },
+        "commonAddress": { "type": "integer", "minimum": 0 },
+        "infoObjectAddress": { "type": "integer", "minimum": 0 },
+        "cot": { "type": "integer", "minimum": 0 },
+        "timestampType": { "enum": ["none", "CP24Time2a", "CP56Time2a"], "default": "none" }
+      }
+    },
+    "bindingMqtt": {
+      "type": "object",
+      "required": ["protocol", "topicTemplate"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "mqtt" },
+        "topicTemplate": {
+          "type": "string",
+          "description": "如 fieldlink/data/{slave}/{registerType}/{address}；大括号占位符由端点/绑定上下文填充"
+        },
+        "qos": { "type": "integer", "minimum": 0, "maximum": 2, "default": 0 },
+        "retain": { "type": "boolean", "default": false },
+        "payloadTemplate": { "type": "string", "description": "JSON 载荷模板，沿用 FieldLink MQTT_GUIDE 规范" },
+        "cmdTopic": { "type": "string", "description": "下行命令主题，写回 DataBank" }
+      }
+    },
+    "bindingIec61850": {
+      "type": "object",
+      "required": ["protocol", "iedPath"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "iec61850" },
+        "iedPath": { "type": "string" },
+        "fc": { "type": "string" },
+        "dataSet": { "type": "string" },
+        "reportControlBlock": { "type": "string" },
+        "mmsType": { "type": "string" }
+      }
+    },
+    "endpoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/endpointModbus" },
+        { "$ref": "#/$defs/endpointIec104" },
+        { "$ref": "#/$defs/endpointMqtt" },
+        { "$ref": "#/$defs/endpointIec61850" }
+      ]
+    },
+    "endpointModbus": {
+      "type": "object",
+      "required": ["protocol", "transport", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "modbus" },
+        "transport": { "enum": ["tcp", "rtu"] },
+        "bindAddress": { "type": "string", "default": "127.0.0.1" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 1502 },
+        "unitIds": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 247 } },
+        "maxConnections": { "type": "integer", "minimum": 1, "default": 8 },
+        "serialPort": { "type": "string", "description": "RTU 时的 COM 口，如 COM3" },
+        "baudRate": { "type": "integer", "minimum": 1200 },
+        "parity": { "enum": ["none", "even", "odd"] },
+        "dataBits": { "type": "integer", "minimum": 5, "maximum": 8 },
+        "stopBits": { "type": "integer", "minimum": 1, "maximum": 2 }
+      }
+    },
+    "endpointIec104": {
+      "type": "object",
+      "required": ["protocol", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "iec104" },
+        "bindAddress": { "type": "string", "default": "127.0.0.1" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 2404 },
+        "k": { "type": "integer", "minimum": 1, "default": 12 },
+        "w": { "type": "integer", "minimum": 1, "default": 8 },
+        "t0": { "type": "integer", "minimum": 1, "default": 30 },
+        "t1": { "type": "integer", "minimum": 1, "default": 15 },
+        "t2": { "type": "integer", "minimum": 1, "default": 10 },
+        "t3": { "type": "integer", "minimum": 1, "default": 20 },
+        "commonAddress": { "type": "integer", "minimum": 0 },
+        "maxClients": { "type": "integer", "minimum": 1, "default": 1 }
+      }
+    },
+    "endpointMqtt": {
+      "type": "object",
+      "required": ["protocol", "broker"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "mqtt" },
+        "broker": { "enum": ["external", "builtin"], "description": "builtin 为联调/故障注入专用，默认关闭" },
+        "host": { "type": "string", "default": "127.0.0.1" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 1883 },
+        "clientId": { "type": "string" },
+        "keepAlive": { "type": "integer", "minimum": 1, "default": 60 },
+        "tls": { "type": "boolean", "default": false },
+        "topicPrefix": { "type": "string" },
+        "cmdTopic": { "type": "string" }
+      }
+    },
+    "endpointIec61850": {
+      "type": "object",
+      "required": ["protocol"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": "iec61850" },
+        "bindAddress": { "type": "string", "default": "127.0.0.1" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 102 },
+        "iedName": { "type": "string" },
+        "sclPath": { "type": "string", "description": "SCL/ICD/CID 文件（配置包内相对路径）" },
+        "tls": { "type": "boolean", "default": false }
+      }
+    },
+    "fault": {
+      "type": "object",
+      "required": ["id", "target", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "description": "协议名、端点名或 signal.id" },
+        "type": {
+          "enum": ["rejectConnection", "linkDown", "latencyMs", "dropPacket", "exceptionCode", "badQuality", "freezeValue", "timestampRollback"]
+        },
+        "params": { "type": "object", "description": "故障参数，结构随 type 变化，由应用层解释" },
+        "enabled": { "type": "boolean", "default": false },
+        "durationMs": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "controlApi": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "bindAddress": { "type": "string", "default": "127.0.0.1", "description": "默认只监听本机" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8080 },
+        "tokenEnv": {
+          "type": "string",
+          "description": "Token 从环境变量读取，不写进配置包明文"
+        },
+        "remoteWriteEnabled": { "type": "boolean", "default": false, "description": "远程写开关，默认关" }
+      }
+    }
+  }
+}

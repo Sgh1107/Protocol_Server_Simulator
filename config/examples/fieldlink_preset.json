@@ -1,0 +1,137 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "name": "FieldLink 联调预设",
+    "description": "P0 最小闭环：reg0 正弦温度、reg1 随机游走、reg2 常量 42；FieldLink 连 127.0.0.1:1502 即可验收",
+    "seed": 20261111,
+    "tickMs": 100,
+    "timeSource": "simulation"
+  },
+  "devices": [
+    {
+      "id": "dev-01",
+      "name": "虚拟温控设备",
+      "description": "单台虚拟从站，unitId=1",
+      "type": "RTU"
+    }
+  ],
+  "signals": [
+    {
+      "id": "temperature",
+      "name": "温度",
+      "deviceId": "dev-01",
+      "description": "HR[0..1] 正弦温度，float32 / ABCD",
+      "category": "AI",
+      "dataType": "float32",
+      "byteOrder": "ABCD",
+      "scale": 1.0,
+      "offset": 0.0,
+      "unit": "°C",
+      "range": { "min": -40.0, "max": 120.0 },
+      "quality": "Good",
+      "behavior": {
+        "type": "sine",
+        "amplitude": 10.0,
+        "periodMs": 10000,
+        "phaseDeg": 0.0,
+        "min": 15.0,
+        "max": 35.0
+      },
+      "bindings": [
+        {
+          "protocol": "modbus",
+          "unitId": 1,
+          "registerType": "HoldingRegisters",
+          "address": 0,
+          "count": 2
+        }
+      ],
+      "reserved61850": {}
+    },
+    {
+      "id": "pressure",
+      "name": "压力",
+      "deviceId": "dev-01",
+      "description": "HR[2] 随机游走",
+      "category": "AI",
+      "dataType": "uint16",
+      "byteOrder": "ABCD",
+      "scale": 0.1,
+      "offset": 0.0,
+      "unit": "kPa",
+      "range": { "min": 0.0, "max": 1000.0 },
+      "quality": "Good",
+      "behavior": {
+        "type": "randomWalk",
+        "min": 300.0,
+        "max": 700.0,
+        "step": 5.0,
+        "intervalMs": 500
+      },
+      "bindings": [
+        {
+          "protocol": "modbus",
+          "unitId": 1,
+          "registerType": "HoldingRegisters",
+          "address": 2,
+          "count": 1
+        }
+      ],
+      "reserved61850": {}
+    },
+    {
+      "id": "magic",
+      "name": "常量",
+      "deviceId": "dev-01",
+      "description": "HR[3] = 42，用于主站读取一致性冒烟",
+      "category": "AI",
+      "dataType": "uint16",
+      "byteOrder": "ABCD",
+      "scale": 1.0,
+      "offset": 0.0,
+      "unit": "",
+      "range": { "min": 0.0, "max": 65535.0 },
+      "quality": "Good",
+      "behavior": {
+        "type": "constant",
+        "value": 42
+      },
+      "bindings": [
+        {
+          "protocol": "modbus",
+          "unitId": 1,
+          "registerType": "HoldingRegisters",
+          "address": 3,
+          "count": 1
+        }
+      ],
+      "reserved61850": {}
+    }
+  ],
+  "endpoints": [
+    {
+      "protocol": "modbus",
+      "transport": "tcp",
+      "bindAddress": "127.0.0.1",
+      "port": 1502,
+      "unitIds": [1],
+      "maxConnections": 8
+    }
+  ],
+  "faults": [
+    {
+      "id": "fault-illegal-address",
+      "target": "modbus",
+      "type": "exceptionCode",
+      "params": { "code": 2, "address": 9999 },
+      "enabled": false
+    }
+  ],
+  "controlApi": {
+    "enabled": false,
+    "bindAddress": "127.0.0.1",
+    "port": 8080,
+    "tokenEnv": "PROTOSIM_API_TOKEN",
+    "remoteWriteEnabled": false
+  }
+}

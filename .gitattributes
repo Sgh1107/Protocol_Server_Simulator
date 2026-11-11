@@ -1,0 +1,35 @@
+# 统一 LF：Windows 开发时避免 CRLF 污染 JSON / CSV / 配置基线，也避免跨平台 diff 噪音
+* text=auto eol=lf
+
+*.md              text eol=lf
+*.json            text eol=lf
+*.txt             text eol=lf
+*.csv             text eol=lf
+*.schema.json     text eol=lf
+*.h               text eol=lf
+*.hpp             text eol=lf
+*.c               text eol=lf
+*.cpp             text eol=lf
+*.py              text eol=lf
+*.cmake           text eol=lf
+CMakeLists.txt    text eol=lf
+*.yml             text eol=lf
+*.yaml            text eol=lf
+*.qss             text eol=lf
+*.qml             text eol=lf
+*.ts              text eol=lf
+.gitignore        text eol=lf
+.gitattributes    text eol=lf
+
+# 二进制（不参与换行转换）
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.svg   binary
+*.dll   binary
+*.exe   binary
+*.lib   binary
+*.pdb   binary
+*.zip   binary

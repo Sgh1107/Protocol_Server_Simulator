@@ -1,0 +1,52 @@
+.workbuddy
+
+# --- Build / CMake ---
+build/
+build-*/
+out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.o
+*.obj
+*.dll
+*.exe
+*.lib
+*.a
+*.pdb
+*.ilk
+*.exp
+
+# --- Qt / Qt Creator ---
+*.user
+*.pro.user*
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+.qmake.stash
+Makefile
+Makefile.Debug
+Makefile.Release
+
+# --- IDE / OS ---
+.vs/
+.vscode/
+.idea/
+*.suo
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# --- Python (tools/ only) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- Runtime artifacts ---
+*.log
+logs/
+*.sqlite
+*.sqlite3
+*.db
