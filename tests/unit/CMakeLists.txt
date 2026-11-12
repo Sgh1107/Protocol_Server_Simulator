@@ -46,3 +46,9 @@ protosim_add_test(tst_pipeline
     tst_pipeline.cpp
 )
 target_link_libraries(tst_pipeline PRIVATE protosim_core)
+
+# 表头约束：需要 QApplication（Qt Widgets），属于 L1 里唯一带 GUI 依赖的用例
+protosim_add_test(tst_headerview
+    tst_headerview.cpp
+)
+target_link_libraries(tst_headerview PRIVATE protosim_ui Qt6::Widgets)

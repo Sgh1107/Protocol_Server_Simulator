@@ -24,6 +24,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QFile>
+#include <QIcon>
 #include <QPixmap>
 #include <QTimer>
 #include <QMessageBox>
@@ -58,8 +59,10 @@ int main(int argc, char *argv[])
     // protosim_ui 是静态库，qrc 生成的资源初始化和链接器会"看不见引用"而裁掉，
     // 必须显式 Q_INIT_RESOURCE 一次，否则 QML 会报 No such file。
     Q_INIT_RESOURCE(qml);
+    Q_INIT_RESOURCE(icons);
 
     QApplication app(argc, argv);
+    app.setWindowIcon(QIcon(QStringLiteral(":/resources/app-256.png")));
     QCoreApplication::setApplicationName(QStringLiteral("ProtoSim"));
     QCoreApplication::setApplicationVersion(protosim::versionString());
     QCoreApplication::setOrganizationName(QStringLiteral("ProtoSim"));

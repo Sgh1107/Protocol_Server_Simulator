@@ -32,6 +32,8 @@ Q_SIGNALS:
     void themeToggleRequested();
 
 private:
+    void applyIcons(bool dark);
+
     QPushButton *m_runButton = nullptr;
     QPushButton *m_pauseButton = nullptr;
     QPushButton *m_stepButton = nullptr;
@@ -39,6 +41,7 @@ private:
     QLabel *m_chipDot = nullptr;
     QLabel *m_chipProto = nullptr;
     QLabel *m_chipAddr = nullptr;
+    QPushButton *m_exportButton = nullptr;
     QPushButton *m_themeButton = nullptr;
     QLabel *m_brandSub = nullptr;
     bool m_updatingSpeed = false;

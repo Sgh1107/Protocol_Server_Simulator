@@ -131,7 +131,7 @@ SignalRail::SignalRail(QWidget *parent)
     : QWidget(parent)
 {
     setObjectName(QStringLiteral("railPanel"));
-    setFixedWidth(272);
+    setFixedWidth(240);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);

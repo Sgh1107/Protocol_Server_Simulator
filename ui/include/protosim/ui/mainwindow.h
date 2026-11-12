@@ -65,6 +65,13 @@ private:
     void onTick(qint64 virtualTimeMs, qint64 tickCount);
     void onExportFrames();
     void onThemeToggle();
+    bool restoreTableLayout();
+    void saveTableLayout() const;
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
+private:
 
     Context m_context;
     ThemeBridge *m_theme = nullptr;

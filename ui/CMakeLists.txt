@@ -12,6 +12,7 @@ add_library(protosim_ui STATIC
     include/protosim/ui/commandbar.h
     include/protosim/ui/signalrail.h
     include/protosim/ui/statusstrip.h
+    include/protosim/ui/proportionalheaderview.h
     include/protosim/ui/mainwindow.h
 
     src/theme.cpp
@@ -21,9 +22,11 @@ add_library(protosim_ui STATIC
     src/commandbar.cpp
     src/signalrail.cpp
     src/statusstrip.cpp
+    src/proportionalheaderview.cpp
     src/mainwindow.cpp
 
     qml.qrc
+    icons.qrc
 )
 
 target_include_directories(protosim_ui

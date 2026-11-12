@@ -9,6 +9,8 @@
 | --- | --- |
 | `ui-redesign-v1.html` | 静态设计稿：深浅两版并排，含改版说明与设计取舍。**评审用** |
 | `ui-prototype-live.html` | 可交互原型：真实 tick、真实 hex、按钮都能点。**感受密度与动效** |
+| `icons.html` | 图标集：24px 实尺寸对照 + 应用图标 16/32/64/128 |
+| `icons/*.svg` | 图标源文件（改完跑 `python tools/make_icons.py` 重新生成 PNG/ICO） |
 | 本文件 | 落地记录：设计令牌怎么映射到 Qt、哪些地方做了取舍 |
 
 两个 HTML 都是自包含的，双击即可在浏览器打开。原型支持
@@ -49,3 +51,32 @@ ui/
    信号槽后连就永远收不到 → 必须先 `connect` 再 `setSource`，并补一次 `status()` 判断。
 2. **`painter->setBrush(cond ? QColor : Qt::NoBrush)` 会走 `QBrush(QColor)`**：
    非强制态的按钮被填成实心黑块。改成显式分支。
+
+## 图标集
+
+16 个线性图标 + 一张应用图标，全部由 `tools/make_icons.py` 生成：
+
+- **风格**：24×24 网格、1.6px 描边、圆角端点。**不填色**——颜色由主题令牌给
+  （深色 `#8a94a3` / 浅色 `#66738a`），换主题时整组跟着变。
+- **产物**：`ui/resources/icons/{dark,light}/`（20px + 40px@2x，进 qrc）、
+  `ui/resources/app.ico`（16~256 七档，嵌进 exe）、`ui/resources/app-256.png`（窗口图标）。
+- **渲染方式**：Chrome 无头截图，把整组排成无间距网格一次截完再切，比逐个渲染快两个数量级；
+  透明背景靠 `--default-background-color=00000000`。
+- **踩过的坑**：两档尺寸最初都写同名文件，40px 那轮把 20px 覆盖了，qrc 里只剩一半。
+
+## 表头：填充式拖拽
+
+`ProportionalHeaderView` 实现了"每列可拖 + 总宽恒定 + 每列上下限"：
+
+- 拖宽某列时，其它列按各自"可让出的余量"分摊，**总宽始终等于表格宽度**（不会出现横向滚动条）
+- 每列有 min/max（见 `ui/src/mainwindow.cpp` 里的 `setColumnBounds`），谁也挤不没、也不会独占
+- 窗口尺寸变化时按当前比例重新铺满
+
+两个反直觉的坑（都写在类注释里）：
+
+1. 不能拿"表头宽度比"当缩放比例——列宽之和本来就不等于表头宽度，比例会被反复放大把列拉爆。
+2. 不能拿"当前列宽"反复乘比例——最小宽度会截断，多 resize 几次列越缩越窄。
+   正解是记一份权重，每次分配都从权重出发。
+
+这三条不变量由 `tests/unit/tst_headerview.cpp` 断言（ctest 第 10 项）：
+铺满后总宽 == 视口、拖宽后总宽不变、拖到极限会被夹在 min/max 内。
