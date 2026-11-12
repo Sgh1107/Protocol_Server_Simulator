@@ -388,7 +388,7 @@ QML 保留 → QtQml 已在依赖里 → **直接用 `QJSEngine`**，脚本能�
 | **Widgets + QML 混合：两套主题 / 两套测试栈** | 深浅主题不同步、CI 变复杂 | §6.9 统一配色令牌；`qmllint` + Qt Quick Test 进 CI |
 | NanoMQ 0.25.7 有较多 2026 内存安全公告 | 外挂 Broker 暴露时有风险 | 仅作本地联调/故障注入，默认用内置 mini Broker；不暴露公网，或改用 Mosquitto 2.1.2 |
 | 工具链混用 | 链接/运行时诡异崩溃 | §3.2 铁律 + CMake 显式运行时库 |
-| "先 Win 后 Linux" 变 Win32 绑死 | Linux 版等于重写 | §3.4 平台隔离 + CI 常驻 Linux 编译守卫 |
+| "先 Win 后 Linux" 变 Win32 绑死 | Linux 版等于重写 | §3.4 平台隔离（**P0 阶段已取消 CI 常驻 Linux 守卫**，理由见 `P0_PLAN.md` §7；平台隔离纪律本身不变） |
 | 数据库被误当成实时库 | 确定性与性能崩塌 | §4.1 明确 DataBank 只在内存；`ITelemetrySink` / `IResultStore` 承接扩展 |
 | 依赖膨胀 | 打包体积、合规清单、构建时间失控 | §7 分阶段引入 + 每阶段盘点 |
 

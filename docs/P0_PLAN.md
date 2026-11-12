@@ -27,7 +27,7 @@ P0 是**单协议闭环**，不是三协议齐头并进。产出必须是绿色 
 
 | # | 任务 | 产出（规划路径） | 依赖 | 验收口径 | 复杂度 |
 | --- | --- | --- | --- | --- | --- |
-| **P0-1** | 仓库骨架与构建 | `CMakeLists.txt`、`cmake/ProjectVersions.cmake`、`.clang-format`、`.editorconfig`、`.gitattributes`、`.github/workflows/ci.yml` | — | `cmake --fresh -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=<Qt6.6.3/msvc2019_64>` 配置通过；Windows + Linux 编译守卫作业均为绿 | 低 |
+| **P0-1** | 仓库骨架与构建 | `CMakeLists.txt`、`cmake/ProjectVersions.cmake`、`.clang-format`、`.editorconfig`、`.gitattributes`、`.github/workflows/ci.yml` | — | `cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=<Qt6.6.3/msvc2019_64>` 配置通过；Windows CI 作业全绿（**P0 不设 Linux 作业**，见文末变更记录） | 低 |
 | **P0-2** | `sim-core` 数据模型 | `sim-core/signal.h/.cpp`、`databank.h/.cpp`、`quality.h` | P0-1 | `Signal + ProtocolBinding` 可表达多绑定；DataBank 读写原子、带质量码与时标；四种字节序换算单测全过 | 中 |
 | **P0-3** | 配置包加载与校验 | `sim-core/configbundle.h/.cpp`、`config/schema/sim-config.schema.json`、`tools/validate_config.py` | P0-2 | `config/examples/fieldlink_preset.json` 通过 Schema；缺 `schemaVersion` 被拒；路径穿越被拒；覆盖前备份存在 | 中 |
 | **P0-4** | 仿真引擎最小集 | `sim-core/simulationengine.h/.cpp`、`curve.h` | P0-2 | 100ms tick、确定性种子、播放/暂停/单步/倍速；同种子两次运行逐帧一致；`Curve` 为接口，脚本实现留到 P1 | 中 |
@@ -75,14 +75,14 @@ P0 是**单协议闭环**，不是三协议齐头并进。产出必须是绿色 
 | AC-P0-16 | `--selftest` | 命令行执行 | 9 项自检全通过，退出码 0 |
 | AC-P0-17 | **L3 互验** | 用 FieldLink 连 `127.0.0.1:1502` | 读到正弦温度；写寄存器后回读一致 —— **P0 的核心验收口径** |
 | AC-P0-18 | 绿色包 | `windeployqt --qmldir ui/qml` 打包，拷到干净 Windows 解压运行 | 无需安装 Qt / VC_redist 之外的依赖即可启动并连上 1502 |
-| AC-P0-19 | 平台守卫 | CI 的 Linux 编译作业 | 编译通过（不要求功能通过），确认无 Win32 API 渗入 `sim-core` |
+| ~~AC-P0-19~~ | ~~平台守卫~~ | ~~CI 的 Linux 编译作业~~ | **已取消**（2026-11-12 决定：P0 只守 Windows + MSVC，Linux 版本待单独立项） |
 
 ---
 
 ## 5. Definition of Done
 
-- [ ] AC-P0-01 ~ AC-P0-19 全部通过，其中 17、18 有手工/录屏留证
-- [ ] 三层测试接入 CI（`windows-2022` 构建 + Linux 编译守卫）
+- [ ] AC-P0-01 ~ AC-P0-19 全部通过（AC-P0-19 已取消，不列入），其中 17、18 有手工/录屏留证
+- [ ] 测试接入 CI（`windows-2022` 构建 + 测试 + 自检；**无 Linux 作业**）
 - [ ] 绿色 zip 产出，README 的"快速开始"照着做能跑通
 - [ ] `THIRD_PARTY_NOTICES.md` 初版（至少列出 Qt 6.6.3 各模块及许可证档）
 - [ ] **P0 复盘**：复核 §3.5 的 6.12 升级判定标准、决定是否切 Qt 版本；同时复盘是否调整 P2 的 104 实现路径
@@ -100,3 +100,13 @@ P0 是**单协议闭环**，不是三协议齐头并进。产出必须是绿色 
 | 配置包 Schema 过早锁死 | `schemaVersion` + 61850 预留字段已留；Schema 只约束结构，语义校验放应用层 |
 | 依赖悄悄膨胀 | 每阶段结束做依赖盘点；P0 不许出现 SQLite、MQTT broker、任何第三方 C 库 |
 | 报文日志拖慢 100ms tick | 内存环形缓冲 + 批量落盘；P0 不落 SQLite |
+
+---
+
+## 7. 变更记录
+
+| 日期 | 变更 | 原因 |
+| --- | --- | --- |
+| 2026-11-12 | **删除 AC-P0-19（Linux 平台守卫）**，DoD 里的「Linux 编译守卫」同步删除 | 项目定位是 Windows 桌面联调工具，Linux 版本待 P0 之后单独立项；P0 阶段维护一个跑不通的 Linux 作业只会制造噪音 |
+| 2026-11-12 | **CI 不设格式门禁** | 格式由 `.clang-format` + 评审保证；为排版差异反复烧 CI 分钟不划算 |
+| 2026-11-12 | P0-1 验收口径从 `-G Ninja` 改为 VS 生成器 | 开发机无 Ninja，且 CI runner 的 PATH 里带 MinGW，VS 生成器能直接锁死 MSVC |

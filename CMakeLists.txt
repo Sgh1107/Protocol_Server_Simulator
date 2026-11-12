@@ -2,7 +2,7 @@
 #
 # ProtoSim — 工业协议服务端模拟器
 # 构建：cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=<Qt6.6.3/msvc2019_64>
-# 纪律：sim-core 不链接任何协议库（AC-P0-01 / AC-P0-19）。
+# 纪律：sim-core 不链接任何协议库(AC-P0-01 / AC-P0-19)
 
 cmake_minimum_required(VERSION 3.23)
 
@@ -27,7 +27,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)   # 不用 .ui 文件，界面全部手写代码
 
-option(PROTOSIM_WERROR "把警告当错误（CI 打开）" OFF)
+option(PROTOSIM_WERROR "把警告当错误(CI 打开)" OFF)
 option(PROTOSIM_BUILD_TESTS "构建测试" ON)
 
 # 产物集中到 build/bin、build/lib，多配置生成器也压平，避免 bin/Debug 套娃
@@ -41,7 +41,6 @@ endforeach()
 
 # ---------------------------------------------------------------- Qt
 
-# EXACT 是刻意的：全项目必须是同一 Qt 版本，出现混装立刻失败。
 find_package(Qt6 ${PROTOSIM_QT_VERSION} EXACT REQUIRED COMPONENTS
     Core
     Network
@@ -49,7 +48,6 @@ find_package(Qt6 ${PROTOSIM_QT_VERSION} EXACT REQUIRED COMPONENTS
     Widgets
     Quick
     QuickWidgets
-    Charts
     Test
 )
 
@@ -58,7 +56,7 @@ include(CompilerOptions)
 # ---------------------------------------------------------------- 子目录
 
 add_subdirectory(sim-core)     # 纯逻辑：不依赖协议库、不依赖 GUI
-add_subdirectory(adapters)     # 协议适配器（唯一允许链接 SerialBus 的地方）
+add_subdirectory(adapters)     # 协议适配器(唯一允许链接 SerialBus 的地方)
 add_subdirectory(ui)           # Widgets + QML
 add_subdirectory(app)          # 可执行入口
 

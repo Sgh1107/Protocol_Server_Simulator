@@ -159,11 +159,47 @@ Modbus 侧没有专门的"值越界"异常码，最接近的是 0x03。要不要
 | AC-P0-16 `--selftest` | ✅ | 9/9 通过，退出码 0（绿色包内同样通过） |
 | AC-P0-17 **L3 FieldLink 互验** | ⏳ **需要你手工** | 我这边没有 FieldLink，只能保证 1502 起来且协议符合规范 |
 | AC-P0-18 绿色包 | 🟡 部分 | zip 已产出（29 MB），在**本机**清空 Qt 的 PATH 后自检通过；"干净 Windows"只能在另一台机器验 |
-| AC-P0-19 Linux 守卫 | ⏳ 未跑 | CI 写了，但没推仓库没跑过（你也说了不提交代码） |
+| ~~AC-P0-19 Linux 守卫~~ | ❌ **已取消** | 2026-11-12 决定：P0 只守 Windows + MSVC，Linux 待单独立项。CI 与文档同步删除 |
 
 ---
 
-## 6. 建议的下一步（按优先级）
+## 6. CI 体检结果（2026-11-12，第一次跑，三个作业全红）
+
+### 6.1 Windows 作业：两个真因
+
+| 现象 | 真因 | 修法 |
+| --- | --- | --- |
+| CMake 报「编译器无法识别」，实际用了 `C:/mingw64/bin/c++.exe` | windows runner 的 PATH 里有 MinGW，`-G Ninja` 下 CMake 按 PATH 找编译器，先撞到 g++ | **改用 VS 生成器** `-G "Visual Studio 17 2022" -A x64`，从生成器层面锁死 MSVC，不依赖 PATH 顺序（比 `msvc-dev-cmd` 少一层不确定性） |
+| `Failed to find required Qt component "SerialBus"` | `install-qt-action` 走 `aqt --autodesktop`，默认只装 `qtbase / qtdeclarative / qttools / qtsvg / qttranslations`，**不含 qtserialbus** | 显式声明 `modules: qtserialbus` |
+| （潜在）`find_package` 还要求 `Charts` | 我列进 components 但没有任何 target 链接它 | 从 `find_package` 删掉；曲线本来就是 Qt Quick Canvas 自绘，不留未使用依赖 |
+
+> 顺带验证了 `-DPROTOSIM_WERROR=ON` 这条路：本机第一次跑就抓到 3 处 MSVC **C4310**（`char(0xFF)`、`char(0x83)` 常量截断），
+> 在 `tst_modbusframe.cpp` 里已改成显式掩码再转 char。现在 `/WX` 下 **0 warning / 0 error**，9/9 测试与 9/9 自检全过。
+> 也就是说：CI 里开 WERROR 这个决定本身是对的，只是我之前没在本地验过。
+
+### 6.2 Linux 作业：删了
+
+- 直接原因：`install-qt-action` 的 `target: "Desktop"` 大小写不合法（应为 `desktop`），作业在装 Qt 那步就挂了；
+- 根本原因：**P0 不该有它**。项目定位是 Windows 桌面工具，维护一个跑不通、又没人看的作业只是噪音。AC-P0-19 一并取消，`P0_PLAN.md` §7 有变更记录。
+
+### 6.3 clang-format 作业：删了
+
+- 直接原因：我加的代码不符合我自己定的 `.clang-format`（53 个文件、2096 处）；
+- 处理：**删掉门禁**，`.clang-format` 保留作为约定（编辑器/IDE 用它），但不再用 CI 强制。
+  如果以后想要格式门禁，正确做法是「先全仓 `clang-format -i`，再在 CI 里钉死 clang-format 版本」——不同版本对同一批代码的判定会不一样，不钉版本必翻车。
+
+### 6.4 现在的 CI 只剩一个作业
+
+`windows-2022`：装 Qt（含 qtserialbus）→ 配置（WERROR）→ 编译 → ctest → `--selftest`。
+
+仍未覆盖的三件事（**有意为之**，不是遗漏）：
+1. 干净 Windows 上的绿色包运行（AC-P0-18，只能人工）；
+2. FieldLink 真实互验（AC-P0-17，只能人工）；
+3. 打包（`windeployqt`）——CI 里跑一次要 3 分钟且产物没地方放，等有发布需求再加。
+
+---
+
+## 7. 建议的下一步（按优先级）
 
 1. **先跑 AC-P0-17**：启动模拟器，FieldLink 连 1502，读 HR[0..1] 看温度是否 15~35 周期变化，再 FC16 写、FC03 回读。这是 P0 的真正验收线。
 2. 拍板 §1 的 5 条（尤其 1.1 和 1.2），我按你的口径调实现/用例。

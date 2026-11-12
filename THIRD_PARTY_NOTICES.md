@@ -16,7 +16,7 @@
 | Qt 6 Sql | 6.6.3 | LGPL-3.0 | P1 | SQLite 冷数据、报文归档 |
 | Qt 6 Test | 6.6.3 | LGPL-3.0 | P0（构建期） | 单元测试，不随运行包分发 |
 | Qt 6 Svg / LinguistTools | 6.6.3 | LGPL-3.0 | P1 | 图标、中英双语 `.ts` |
-| Qt 6 Charts | 6.6.3 | **GPL-3.0 / 商业** | 未链接（P1 视需要） | 若启用，与全仓 GPLv3 一致；当前曲线用 Qt Quick Canvas 自绘，未引入 |
+| Qt 6 Charts | 6.6.3 | **GPL-3.0 / 商业** | 未链接（P1 视需要） | 曲线预览当前用 Qt Quick Canvas 自绘；`find_package` 里没有 Charts，CI 也不装 qtcharts |
 
 **Qt 许可结论**：本项目以 LGPLv3 档使用 Qt，全仓为 GPL-3.0-or-later，二者兼容。分发绿色包时须提供：
 1. 本声明与 Qt 的 LGPLv3 许可文本（`windeployqt` 会随包附带 `LICENSE.LGPL3` 等文件）；
@@ -38,7 +38,7 @@
 | Ninja | 不锁 | Apache-2.0 | 生成器（CI 使用；本机可用 VS 生成器） |
 | clang-format | 不锁 | Apache-2.0 with LLVM exceptions | 代码风格 |
 | Python 3 + `jsonschema` | 不锁 | PSF / MIT | `tools/validate_config.py`、`tools/package.py` |
-| GitHub Actions `windows-2022` / `ubuntu-22.04` | — | — | CI |
+| GitHub Actions `windows-2022` | — | — | CI（仅 Windows；P0 不设 Linux 作业） |
 
 ## 4. P0 明确**未**引入的依赖
 

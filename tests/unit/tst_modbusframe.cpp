@@ -12,6 +12,13 @@ using namespace protosim::modbus;
 
 namespace {
 
+/// 显式掩码再转 char：直接 char(0xFF) 会触发 MSVC C4310（常量截断），
+/// 在 -DPROTOSIM_WERROR=ON 下就是编译错误。
+char pduByte(int value)
+{
+    return static_cast<char>(value & 0xFF);
+}
+
 QByteArray adu(quint16 txId, quint8 unitId, const QByteArray &pdu)
 {
     QByteArray out;
@@ -81,7 +88,7 @@ private Q_SLOTS:
     void detectsExceptionResponse()
     {
         QByteArray pdu;
-        pdu.append(char(kReadHoldingRegisters | 0x80));
+        pdu.append(pduByte(kReadHoldingRegisters | 0x80));
         pdu.append(char(kIllegalDataAddress));
         const Adu parsed = parseAdu(adu(7, 1, pdu));
 
@@ -157,7 +164,7 @@ private Q_SLOTS:
         coilPdu.append(char(kWriteSingleCoil));
         coilPdu.append(char(0));
         coilPdu.append(char(5));
-        coilPdu.append(char(0xFF));
+        coilPdu.append(pduByte(0xFF));
         coilPdu.append(char(0));
         const QString coilText = describe(parseAdu(adu(2, 1, coilPdu)));
         QVERIFY2(coilText.contains(QStringLiteral("FC05")), qPrintable(coilText));
@@ -167,7 +174,7 @@ private Q_SLOTS:
     void describesException()
     {
         QByteArray pdu;
-        pdu.append(char(kReadHoldingRegisters | 0x80));
+        pdu.append(pduByte(kReadHoldingRegisters | 0x80));
         pdu.append(char(kIllegalFunction));
         const QString text = describe(parseAdu(adu(1, 1, pdu)));
         QVERIFY2(text.contains(QStringLiteral("0x01")), qPrintable(text));

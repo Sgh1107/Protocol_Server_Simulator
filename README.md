@@ -1,7 +1,7 @@
 # ProtoSim — 工业协议服务端模拟器（暂定名）
 
-> **当前状态：P0 已落地可运行。** `sim-core` / Modbus TCP 服务端 / 统一写回管线 / 报文日志 / Widgets+QML 界面全部就位，
-> `ctest` 9 项全绿、`--selftest` 9 项通过、绿色 zip 已能产出。P1 起的内容（RTU、多 unit、MQTT、SQLite、故障注入）尚未开始。
+> **当前状态：P0 已落地可运行。** `sim-core` / Modbus TCP 服务端 / 统一写回管线 / 报文日志 / Widgets+QML 界面全部就位，`ctest` 9 项全绿、`--selftest` 9 项通过、绿色 zip 已能产出。P1 起的内容（RTU、多 unit、MQTT、SQLite、故障注入）尚未开始。
+
 > 决策依据：`docs/SERVER_SIMULATOR_PROPOSAL.md`（v0.1 立项方案）、`docs/TECH_STACK_DECISIONS.md`（v0.5 技术基线与依赖决策）、`docs/P0_PLAN.md`（P0 任务与验收）。
 
 ---
@@ -67,7 +67,7 @@
 | `Sql` | SQLite / `IResultStore` | LGPLv3 系 |
 | `Qml` `Quick` `Quick Controls` | QML 局部视图、场景时间轴、动画 | LGPLv3 系 |
 | `QJSEngine`（同属 `Qml` 模块） | 仿真曲线脚本，沿用 FieldLink `scriptengine` 思路 | LGPLv3 系 |
-| `Charts` | QML / Widgets 曲线预览 | **GPLv3 / 商业**（全仓 GPLv3，可用） |
+| `Charts` | QML / Widgets 曲线预览 | **GPLv3 / 商业**（全仓 GPLv3，可用）— **P0 未使用**：曲线用 Qt Quick Canvas 自绘，不留未链接的依赖 |
 | `SerialBus` | `QModbusTcpServer` / `QModbusRtuSerialServer` | **按 LGPLv3 档使用**（该模块另有 GPLv2 档，勿选） |
 | `SerialPort` | Modbus RTU（P1） | LGPLv3 系 |
 | `Svg` `LinguistTools` | 图标、中英双语（Widgets `tr()` / QML `qsTr()` 共用 `.ts`） | LGPLv3 系 |
@@ -209,7 +209,8 @@ ProtoSim/
 | **P2** | 104 Worker（lib60870-C 2.4.1）：总召唤、突发上送、SBO、时钟同步、k/w 参数；场景回放 | 第三方 104 主站完成总召唤 + 遥控闭环；Worker 崩溃不影响 UI |
 | **P3** | 61850 Worker：SCL 导入、MMS 报告/控制、数据集；GOOSE/SV 视需求 | 与 61850 客户端互认、报告触发 |
 
-Linux 版本在 P0 之后单独立项；CI 从 P0 起保留一个 Linux 编译作业，用于提前暴露平台耦合。
+Linux 版本在 P0 之后单独立项。**P0 的 CI 只跑 Windows x64 + MSVC**（配置 / 编译 / 测试 / 自检四项），
+不设 Linux 编译作业、也不设格式门禁——理由记在 `docs/P0_PLAN.md` §7 变更记录。
 
 ---
 
