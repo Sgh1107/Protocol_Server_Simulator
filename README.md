@@ -69,7 +69,7 @@
 | `QJSEngine`（同属 `Qml` 模块） | 仿真曲线脚本，沿用 FieldLink `scriptengine` 思路 | LGPLv3 系 |
 | `Charts` | QML / Widgets 曲线预览 | **GPLv3 / 商业**（全仓 GPLv3，可用）— **P0 未使用**：曲线用 Qt Quick Canvas 自绘，不留未链接的依赖 |
 | `SerialBus` | `QModbusTcpServer` / `QModbusRtuSerialServer` | **按 LGPLv3 档使用**（该模块另有 GPLv2 档，勿选） |
-| `SerialPort` | Modbus RTU（P1） | LGPLv3 系 |
+| `SerialPort` | Modbus RTU（P1） | LGPLv3 系 — **P0 起即为构建期硬依赖**：`Qt6SerialBusConfig.cmake` 里 `find_dependency(Qt6SerialPort)`，CI 装 Qt 时必须同时给 `qtserialbus qtserialport` |
 | `Svg` `LinguistTools` | 图标、中英双语（Widgets `tr()` / QML `qsTr()` 共用 `.ts`） | LGPLv3 系 |
 
 > Qt 6.6 **没有** `QtHttpServer`（6.7+）、StyleKit（6.12 Labs）、QML 热重载（6.12）、Qt Canvas Painter（6.12）。因此 HTTP 控制 API 用 `QTcpServer` 手写，QML 主题用 Qt Quick Controls `palette` + 自定义配色令牌。**代码中禁止使用 6.7+ API**，否则将来升级 LTS 成本会很高。

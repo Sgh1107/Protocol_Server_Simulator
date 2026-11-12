@@ -29,15 +29,43 @@ jobs:
       # 两个关键点：
       # 1) runner 的 PATH 里有 MinGW 的 c++.exe，用 VS 生成器锁死 MSVC，
       #    比"Ninja + msvc-dev-cmd"少一层对 PATH 顺序的依赖；
-      # 2) modules 必须显式给 qtserialbus —— aqt 的 --autodesktop 默认只装
-      #    qtbase/qtdeclarative/qttools/qtsvg，没有 SerialBus，find_package 必失败。
+      # 2) modules 必须同时给 qtserialbus **和** qtserialport：
+      #    aqt 的 --autodesktop 默认只装 qtbase/qtdeclarative/qttools/qtsvg，
+      #    而 Qt6SerialBusConfig.cmake 里 find_dependency(Qt6SerialPort)，
+      #    只装 serialbus 会让 SerialBus 自己判 FOUND=FALSE。
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: "6.6.3"
           arch: win64_msvc2019_64
-          modules: qtserialbus
+          modules: qtserialbus qtserialport
           cache: true
+
+      # 预检：把"缺哪个 Qt 模块"提前说清楚。
+      # 没有这一步，缺模块会在 find_package 里滚成一大段 CMake 报错，
+      # 得靠读日志猜——上次就是靠猜 SerialPort 才多跑了一轮。
+      # 注意 SerialBus 对 SerialPort 是硬依赖（find_dependency），两个都得装。
+      - name: Assert required Qt modules
+        shell: bash
+        run: |
+          if [ -z "$QT_ROOT_DIR" ]; then
+            echo "::warning::QT_ROOT_DIR 未设置，跳过模块自检"
+            exit 0
+          fi
+          missing=0
+          for m in Qt6Core Qt6Gui Qt6Network Qt6Widgets Qt6Quick Qt6QuickWidgets Qt6Test \
+                   Qt6SerialBus Qt6SerialPort; do
+            if [ ! -f "$QT_ROOT_DIR/lib/cmake/$m/${m}Config.cmake" ]; then
+              echo "::error::缺少 Qt 模块 $m（检查 install-qt-action 的 modules 参数）"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "已安装的 cmake 模块目录："
+            ls "$QT_ROOT_DIR/lib/cmake" | tr '\n' ' '
+            echo
+          fi
+          exit $missing
 
       - name: Configure
         run: >

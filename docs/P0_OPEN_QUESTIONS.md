@@ -171,7 +171,13 @@ Modbus 侧没有专门的"值越界"异常码，最接近的是 0x03。要不要
 | --- | --- | --- |
 | CMake 报「编译器无法识别」，实际用了 `C:/mingw64/bin/c++.exe` | windows runner 的 PATH 里有 MinGW，`-G Ninja` 下 CMake 按 PATH 找编译器，先撞到 g++ | **改用 VS 生成器** `-G "Visual Studio 17 2022" -A x64`，从生成器层面锁死 MSVC，不依赖 PATH 顺序（比 `msvc-dev-cmd` 少一层不确定性） |
 | `Failed to find required Qt component "SerialBus"` | `install-qt-action` 走 `aqt --autodesktop`，默认只装 `qtbase / qtdeclarative / qttools / qtsvg / qttranslations`，**不含 qtserialbus** | 显式声明 `modules: qtserialbus` |
+| 第二轮：SerialBus 找到了，但报 `Qt6SerialPort could not be found` | **SerialBus 对 SerialPort 是硬依赖**（`Qt6SerialBusConfig.cmake` 里 `find_dependency(Qt6SerialPort)`），只装 serialbus 会让 SerialBus 自己判 `FOUND=FALSE` | `modules: qtserialbus qtserialport`（两个都要） |
 | （潜在）`find_package` 还要求 `Charts` | 我列进 components 但没有任何 target 链接它 | 从 `find_package` 删掉；曲线本来就是 Qt Quick Canvas 自绘，不留未使用依赖 |
+
+> **教训**：Qt 的模块间有传递依赖，`modules` 不能只写直接用的那一个。为免再靠"推一次试一次"，
+> CI 里加了一步 **`Assert required Qt modules`** 预检：装完 Qt 先按清单核对
+> `lib/cmake/<Module>/<Module>Config.cmake` 是否存在，缺哪个直接 `::error::` 点名，
+> 并把已安装的模块目录列出来。这一步只值 2 秒，但每次失败都能一眼定位。
 
 > 顺带验证了 `-DPROTOSIM_WERROR=ON` 这条路：本机第一次跑就抓到 3 处 MSVC **C4310**（`char(0xFF)`、`char(0x83)` 常量截断），
 > 在 `tst_modbusframe.cpp` 里已改成显式掩码再转 char。现在 `/WX` 下 **0 warning / 0 error**，9/9 测试与 9/9 自检全过。

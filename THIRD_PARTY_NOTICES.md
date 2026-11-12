@@ -13,6 +13,7 @@
 | Qt 6 Network | 6.6.3 | LGPL-3.0 | P0 | Modbus TCP 传输、帧观察层 |
 | Qt 6 Qml / Quick / QuickWidgets | 6.6.3 | LGPL-3.0 | P0 | 曲线局部视图 |
 | Qt 6 SerialBus | 6.6.3 | LGPL-3.0（**仅此档**） | P0 | `QModbusTcpServer`。该模块另有 GPLv2 档，本项目不使用 |
+| Qt 6 SerialPort | 6.6.3 | LGPL-3.0 | P0（构建期传递依赖） | `Qt6SerialBus` 通过 `find_dependency` 硬依赖它；运行包内由 `windeployqt` 一并带入 |
 | Qt 6 Sql | 6.6.3 | LGPL-3.0 | P1 | SQLite 冷数据、报文归档 |
 | Qt 6 Test | 6.6.3 | LGPL-3.0 | P0（构建期） | 单元测试，不随运行包分发 |
 | Qt 6 Svg / LinguistTools | 6.6.3 | LGPL-3.0 | P1 | 图标、中英双语 `.ts` |
