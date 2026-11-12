@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 开发期工具依赖（不进运行时、不随绿色包分发）。
+# 安装：python -m pip install -r tools/requirements.txt
+jsonschema>=4.20

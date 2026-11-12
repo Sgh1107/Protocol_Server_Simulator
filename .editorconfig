@@ -1,0 +1,19 @@
+root = true
+
+# 全仓统一：UTF-8 + LF + 4 空格。中文注释与字符串直接写，不转义。
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab

@@ -1,0 +1,6 @@
+<RCC>
+    <!-- prefix 留空：文件路径本身已含 qml/，资源实际落在 :/qml/CurveView.qml -->
+    <qresource prefix="/">
+        <file>qml/CurveView.qml</file>
+    </qresource>
+</RCC>

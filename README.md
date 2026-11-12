@@ -1,7 +1,8 @@
 # ProtoSim — 工业协议服务端模拟器（暂定名）
 
-> **当前状态：方案已定稿，代码尚未开始。** 本仓库目前只有设计文档，以下命令、目录、接口均为规划，不可直接运行。
-> 决策依据：`docs/SERVER_SIMULATOR_PROPOSAL.md`（v0.1 立项方案）、`docs/TECH_STACK_DECISIONS.md`（v0.5 技术基线与依赖决策）。
+> **当前状态：P0 已落地可运行。** `sim-core` / Modbus TCP 服务端 / 统一写回管线 / 报文日志 / Widgets+QML 界面全部就位，
+> `ctest` 9 项全绿、`--selftest` 9 项通过、绿色 zip 已能产出。P1 起的内容（RTU、多 unit、MQTT、SQLite、故障注入）尚未开始。
+> 决策依据：`docs/SERVER_SIMULATOR_PROPOSAL.md`（v0.1 立项方案）、`docs/TECH_STACK_DECISIONS.md`（v0.5 技术基线与依赖决策）、`docs/P0_PLAN.md`（P0 任务与验收）。
 
 ---
 
@@ -31,7 +32,7 @@
 | 框架 | **Qt 6.6.3（已确定，本地已有环境）** |
 | UI | **Widgets 主体 + QML 局部**：点表 / hex 报文 / 设备树 / 多页签用 Widgets；场景时间轴 / 曲线预览 / 演示动画用 QML |
 | 编译器 | **MSVC 2022 x64**（Qt 6.6 官方包 `msvc2019_64` 与之 ABI 兼容）；**不考虑 MinGW** |
-| 构建 | **CMake ≥ 3.25 + Ninja**，不用 qmake |
+| 构建 | **CMake ≥ 3.23 + Ninja**（本机无 Ninja 时可用 VS 生成器），不用 qmake |
 | 目标平台 | **Windows 10 1809+ / 11，x64**；Linux 后续 |
 | 数据库 | **SQLite**（Qt QSQLITE 插件内置），只存冷数据；**实时库 DataBank 只在内存** |
 | 交付形态 | 绿色 zip（`windeployqt --qmldir` + VC++ Redistributable） |
@@ -52,7 +53,7 @@
 | --- | --- | --- | --- | --- |
 | Qt 6 | **6.6.3** | LGPLv3 / GPL 系列 / 商业（逐模块） | 本地已安装；或 Qt 在线安装器归档 | 全项目单基线，所有 Qt 模块必须同版本 |
 | MSVC 2022 | 17.x（x64） | 专有（工具） | Visual Studio 2022「使用 C++ 的桌面开发」 | Windows SDK 一并安装（DbgHelp.lib 用于崩溃 dump） |
-| CMake | **≥ 3.25** | BSD-3 | 独立安装 / Qt Creator 自带 | Qt 6.6 最低要求 3.16，本项目统一 3.25+ |
+| CMake | **≥ 3.23** | BSD-3 | 独立安装 / Qt Creator 自带 | Qt 6.6 最低要求 3.16，本项目统一 3.23+ |
 | Ninja | 随 Qt / 独立 | Apache-2.0 | Qt 安装器 / 独立 | 生成器 |
 | C++ 标准库 | MSVC STL（`/MD`） | 专有（工具） | 随 MSVC | 所有 C 库必须同 CRT |
 | SQLite | **随 Qt 6.6.3 的 QSQLITE 插件内置**，不单独装 | Public Domain | Qt 自带 | P1 起用于报文日志 / 审计 / 剧本 / 自检结果 |
@@ -112,29 +113,45 @@
 
 ---
 
-## 4. 环境准备与构建（规划）
+## 4. 环境准备与构建
 
-> 以下命令是**规划示意**，待 P0 代码落地后生效。
-
-**前置条件**：Windows 10 1809+ / 11 x64、Qt 6.6.3（`msvc2019_64` kit）、Visual Studio 2022（C++ 桌面开发 + Windows SDK）、CMake ≥3.25、Ninja、Git。`CMAKE_PREFIX_PATH` 请按本机 Qt 实际安装路径调整。
-
-在 **「x64 Native Tools Command Prompt for VS 2022」** 中执行：
+**前置条件**：Windows 10 1809+ / 11 x64、Qt 6.6.3（`msvc2019_64` kit）、Visual Studio 2022（C++ 桌面开发 + Windows SDK）、CMake ≥3.23、Git。`CMAKE_PREFIX_PATH` 按本机 Qt 实际安装路径调整。
 
 ```bat
-cmake -S . -B build -G Ninja ^
-  -DCMAKE_PREFIX_PATH="C:/Qt/6.6.3/msvc2019_64" ^
-  -DCMAKE_BUILD_TYPE=Release ^
-  -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
-
+:: 有 Ninja（CI 走这条）
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+  -DCMAKE_PREFIX_PATH="D:/programming/Qt/6.6.3/msvc2019_64"
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+
+:: 没装 Ninja（本机现状，用 VS 生成器）
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_PREFIX_PATH="D:/programming/Qt/6.6.3/msvc2019_64"
+cmake --build build --config Release --parallel
+
+ctest --test-dir build -C Release --output-on-failure
+build\bin\ProtoSim.exe --selftest
 ```
 
-部署绿色包（QML 必须带 `--qmldir`，否则运行时缺 QML 模块）：
+> ⚠️ **MSBuild 的坑**：如果环境里同时存在 `HTTPS_PROXY` 和 `https_proxy`（不少代理工具会这么设），
+> Windows 上这两个变量名不区分大小写，MSBuild 会直接崩在
+> `System.ArgumentException: 已添加项。字典中的关键字:"HTTPS_PROXY"`。
+> 构建前把重复项去掉即可（cmd 里 `set https_proxy=`，bash 里 `env -u https_proxy -u http_proxy cmake --build ...`）。
+
+**测试 / 自检 / 校验**：
+
+| 命令 | 内容 |
+| --- | --- |
+| `ctest --test-dir build -C Release` | L1 纯逻辑 + L2 假主站 E2E，共 9 个测试程序 |
+| `build\bin\ProtoSim.exe --selftest` | 9 项内置自检，退出码 0 表示全通过 |
+| `python tools/validate_config.py` | 配置包 JSON Schema 校验 |
+
+**打绿色包**（QML 必须带 `--qmldir`，否则运行时缺 QML 模块）：
 
 ```bat
-windeployqt --qmldir ui/qml --release build/bin/ProtoSim.exe
+python tools/package.py --qt D:/programming/Qt/6.6.3/msvc2019_64
 ```
+
+产物 `dist/ProtoSim-<版本>-win64.zip` 解压即跑，内含 `config/`、许可声明与「快速开始.txt」。
 
 **工具链铁律**：Qt 预编译库、`lib60870-C`、`libiec61850`、主程序必须**同一编译器、同一 CRT（`/MD`）、同一架构**；不混用 MSVC 与 MinGW 产物。
 
@@ -158,7 +175,7 @@ windeployqt --qmldir ui/qml --release build/bin/ProtoSim.exe
 
 ---
 
-## 6. 目录结构（规划，尚未创建）
+## 6. 目录结构
 
 ```
 ProtoSim/
@@ -211,7 +228,7 @@ Linux 版本在 P0 之后单独立项；CI 从 P0 起保留一个 Linux 编译�
 
 | 项 | 说明 |
 | --- | --- |
-| 代码未开始 | 本 README 描述的是已定稿方案，所有命令与目录均为规划 |
+| P0 已落地、P1 未开始 | 当前只有 Modbus TCP 单协议闭环；RTU、多 unit、MQTT、SQLite、故障注入均为 P1+ |
 | **Qt 6.6.3 已 EOL** | 非 LTS、开源支持 2024-04-02 结束、无安全补丁；**已决定知情接受、暂不升级**，待 6.12 稳定后按 §3.5 五条判定标准于阶段边界切换；开源版 LTS 后续补丁为商业专属，以在线安装器实际可见版本为准 |
 | lib60870 版本红线 | 必须 2.4.1+；2.4.0 及更早存在高危 CVE |
 | TLS 默认关闭 | mbedTLS 2.28 线已停止维护，P2 默认不编 TLS、不引入该库 |
@@ -231,7 +248,9 @@ Linux 版本在 P0 之后单独立项；CI 从 P0 起保留一个 Linux 编译�
 - `config/examples/fieldlink_preset.json` — FieldLink 联调预设（3 信号 / 1 端点），已通过 Schema 校验
 - `docs/INTERFACES.md` — `IProtocolAdapter` 接口契约（统一写回管线、Worker IPC、capabilities 驱动 UI）
 - `docs/P0_PLAN.md` — P0 任务拆解与 19 条验收用例
+- `docs/P0_OPEN_QUESTIONS.md` — P0 落地中的冲突、偏离与待拍板事项
 
-**P0 前置规格已齐（仍不写实现代码）**：配置包 Schema + 示例、接口契约、P0 任务与验收清单全部产出并自检通过。下一步即可按 `docs/P0_PLAN.md` 的 P0-1 开始落地。
+**P0 已落地**：`sim-core` 数据模型 / 确定性仿真 / 配置包校验 / Modbus TCP（8 功能码 + 异常码）/ 统一写回管线 / 报文日志 / UI 骨架 / 三层测试 / `--selftest` / 绿色包全部完成。
+落地过程中遇到的规格冲突与偏离，逐条记录在 `docs/P0_OPEN_QUESTIONS.md`（含 5 条待拍板项）。
 
 **尚待确认（按推荐默认值执行，不阻塞 P0）**：MQTT 客户端是否走自研 codec、项目定位权重（测试替身 / 演示）、P2 的 104 功能范围与验收主站、仓库正式命名、`sim-core` 是否抽成 submodule。

@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 全仓统一代码风格。CI 用 clang-format --dry-run --Werror 检查。
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++17
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+AccessModifierOffset: -4
+
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+AlignAfterOpenBracket: Align
+AlignOperands: AlignAfterOperator
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+
+SortIncludes: CaseSensitive
+IncludeCategories:
+  - Regex: '^"protosim/'
+    Priority: 1
+  - Regex: '^<Q'
+    Priority: 3
+  - Regex: '^<'
+    Priority: 4
+  - Regex: '.*'
+    Priority: 2
+
+SpaceAfterCStyleCast: false
+SpacesInAngles: false
+NamespaceIndentation: None
+FixNamespaceComments: true
+MaxEmptyLinesToKeep: 1
