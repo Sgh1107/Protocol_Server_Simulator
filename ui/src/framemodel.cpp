@@ -2,7 +2,6 @@
 #include "protosim/ui/framemodel.h"
 
 #include <QDateTime>
-#include <QFont>
 
 namespace protosim::ui {
 namespace {
@@ -12,6 +11,41 @@ QString formatTime(qint64 timestampMs)
     if (timestampMs <= 0)
         return QStringLiteral("—");
     return QDateTime::fromMSecsSinceEpoch(timestampMs).toString(QStringLiteral("HH:mm:ss.zzz"));
+}
+
+/// 把 ADU 切成四段并两字节一组：MBAP(灰) / 单元号(暗) / 功能码(蓝) / 数据(白)。
+/// 异常响应的功能码段染红。
+QVariantList buildSegments(const FrameRecord &record)
+{
+    QVariantList segments;
+    const QByteArray &bytes = record.bytes;
+    if (bytes.size() < 8)
+        return segments;
+
+    auto groupHex = [](const QByteArray &chunk) {
+        QString text;
+        for (int i = 0; i < chunk.size(); i += 2) {
+            if (!text.isEmpty())
+                text += QLatin1Char(' ');
+            text += QString::fromLatin1(chunk.mid(i, 2).toHex()).toUpper();
+        }
+        return text;
+    };
+
+    segments.append(QStringList{groupHex(bytes.left(6)), QStringLiteral("mbap")});
+    segments.append(QStringList{groupHex(bytes.mid(6, 1)), QStringLiteral("unit")});
+
+    if (record.error) {
+        segments.append(QStringList{groupHex(bytes.mid(7, 2)), QStringLiteral("err")});
+        if (bytes.size() > 9)
+            segments.append(QStringList{groupHex(bytes.mid(9)), QStringLiteral("data")});
+    } else {
+        segments.append(QStringList{groupHex(bytes.mid(7, 1)), QStringLiteral("fc")});
+        if (bytes.size() > 8)
+            segments.append(QStringList{groupHex(bytes.mid(8)), QStringLiteral("data")});
+    }
+
+    return segments;
 }
 
 QString formatElapsed(qint64 elapsedUs)
@@ -31,15 +65,6 @@ FrameTableModel::FrameTableModel(TelemetryLog *log, QObject *parent)
 {
     if (m_log != nullptr)
         connect(m_log, &TelemetryLog::recordAppended, this, &FrameTableModel::onRecordAppended);
-}
-
-void FrameTableModel::setTokens(const ThemeTokens &tokens)
-{
-    m_tokens = tokens;
-    if (!m_rows.isEmpty()) {
-        Q_EMIT dataChanged(index(0, 0), index(m_rows.size() - 1, ColumnCount - 1),
-                          {Qt::ForegroundRole});
-    }
 }
 
 void FrameTableModel::setFilterSignal(const QString &signalId)
@@ -83,16 +108,12 @@ void FrameTableModel::onRecordAppended(const protosim::FrameRecord &record)
 
 int FrameTableModel::rowCount(const QModelIndex &parent) const
 {
-    if (parent.isValid())
-        return 0;
-    return m_rows.size();
+    return parent.isValid() ? 0 : m_rows.size();
 }
 
 int FrameTableModel::columnCount(const QModelIndex &parent) const
 {
-    if (parent.isValid())
-        return 0;
-    return ColumnCount;
+    return parent.isValid() ? 0 : ColumnCount;
 }
 
 QVariant FrameTableModel::data(const QModelIndex &index, int role) const
@@ -102,23 +123,24 @@ QVariant FrameTableModel::data(const QModelIndex &index, int role) const
 
     const FrameRecord &record = m_rows.at(index.row());
 
-    if (role == Qt::FontRole && index.column() == HexColumn) {
-        QFont font(QStringLiteral("Consolas"));
-        font.setStyleHint(QFont::Monospace);
-        font.setPointSize(9);
-        return font;
+    switch (role) {
+    case SegmentsRole:
+        return buildSegments(record);
+    case ErrorRole:
+        return record.error;
+    case InboundRole:
+        return record.direction == FrameDirection::Inbound;
+    case ElapsedUsRole:
+        return record.elapsedUs;
+    case SummaryRole:
+        return record.summary;
+    case ClientRole:
+        return record.clientId;
+    case TimestampMsRole:
+        return record.timestampMs;
+    default:
+        break;
     }
-
-    if (role == Qt::ForegroundRole) {
-        if (record.error)
-            return m_tokens.bad;
-        if (record.direction == FrameDirection::Outbound)
-            return m_tokens.subtleText;
-        return {};
-    }
-
-    if (role == Qt::TextAlignmentRole && index.column() == TimeColumn)
-        return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
 
     if (role != Qt::DisplayRole)
         return {};
@@ -128,7 +150,7 @@ QVariant FrameTableModel::data(const QModelIndex &index, int role) const
         return formatTime(record.timestampMs);
     case DirectionColumn:
         if (record.bytes.isEmpty())
-            return QStringLiteral("· 记录"); // 端点启停这类事件，不是协议帧
+            return QStringLiteral("· 记录");
         return record.direction == FrameDirection::Inbound ? QStringLiteral("→ 收")
                                                             : QStringLiteral("← 发");
     case ClientColumn:
@@ -136,9 +158,8 @@ QVariant FrameTableModel::data(const QModelIndex &index, int role) const
     case FunctionColumn:
         return record.functionCode == 0
             ? QString()
-            : QStringLiteral("0x%1")
-                  .arg(QString::number(record.functionCode, 16).toUpper().rightJustified(
-                      2, QLatin1Char('0')));
+            : QString::number(record.functionCode, 16).toUpper().rightJustified(2,
+                                                                              QLatin1Char('0'));
     case HexColumn:
         return record.hexString();
     case SummaryColumn:
@@ -148,13 +169,21 @@ QVariant FrameTableModel::data(const QModelIndex &index, int role) const
     default:
         break;
     }
-
     return {};
 }
 
 QVariant FrameTableModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-    if (orientation != Qt::Horizontal || role != Qt::DisplayRole)
+    if (orientation != Qt::Horizontal)
+        return {};
+
+    if (role == Qt::TextAlignmentRole) {
+        const bool numeric = section == TimeColumn || section == ElapsedColumn;
+        return static_cast<int>(numeric ? (Qt::AlignRight | Qt::AlignVCenter)
+                                        : (Qt::AlignLeft | Qt::AlignVCenter));
+    }
+
+    if (role != Qt::DisplayRole)
         return {};
 
     switch (section) {

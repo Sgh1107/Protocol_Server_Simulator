@@ -11,24 +11,23 @@
 #include "protosim/writepipeline.h"
 
 #include <QMainWindow>
-#include <QString>
 
-class QComboBox;
-class QLabel;
+class QQuickWidget;
 class QTableView;
 class QTabWidget;
-class QTreeWidget;
-class QTreeWidgetItem;
-class QQuickWidget;
 
 namespace protosim::ui {
 
-class SignalTableModel;
+class CommandBar;
 class FrameTableModel;
+class SignalRail;
+class SignalTableModel;
+class StatusStrip;
 
-/// 主窗口：设备树 + 点表 + 报文 hex + 曲线。
+/// 主窗口：命令栏 + 设备栏 + 点表 + 报文/曲线 + 状态条。
 ///
-/// 纪律：UI 只读 DataBank / 写走 WritePipeline，绝不直接改实时库。
+/// 纪律：UI 只读 DataBank、写走 WritePipeline；颜色只从 theme.h 取，
+/// 任何硬编码色都会在深浅切换时露馅。
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -41,58 +40,50 @@ public:
         TelemetryLog *log = nullptr;
         EventBus *bus = nullptr;
         SimulationEngine *engine = nullptr;
-        IProtocolAdapter *adapter = nullptr; // 只看接口，不认具体协议（INTERFACES §6）
+        IProtocolAdapter *adapter = nullptr;
     };
 
     MainWindow(const Context &context, ThemeBridge *theme, QWidget *parent = nullptr);
     ~MainWindow() override;
 
     void setBundle(const ConfigBundle &bundle);
-    void setDarkTheme(bool dark);
     void startSimulation();
+    void setDarkTheme(bool dark);
+    void showCurveTab();
 
 private:
     void buildUi();
-    void buildToolBar();
-    void buildDeviceTree();
-    void buildStatusBar();
+    QWidget *buildSignalPanel();
+    QWidget *buildBottomPanel();
     void applyTokens();
+    void syncCurve();
+    void refreshStatus();
 
-    void onToggleRun();
-    void onStep();
-    void onSpeedChanged(int index);
-    void onThemeToggled();
-    void onSelectionChanged();
+    void toggleRunning();
+    void toggleForce(const QString &signalId);
+    void selectSignal(const QString &signalId);
     void onTick(qint64 virtualTimeMs, qint64 tickCount);
     void onExportFrames();
-    void refreshEndpointStatus();
-    void syncCurveLabel();
+    void onThemeToggle();
 
     Context m_context;
     ThemeBridge *m_theme = nullptr;
     ConfigBundle m_bundle;
     bool m_dark = true;
 
-    QTreeWidget *m_deviceTree = nullptr;
+    CommandBar *m_commandBar = nullptr;
+    SignalRail *m_rail = nullptr;
     QTableView *m_signalTable = nullptr;
     QTableView *m_frameTable = nullptr;
-    QTabWidget *m_bottomTabs = nullptr;
-    QQuickWidget *m_curveWidget = nullptr;
-    QComboBox *m_speedCombo = nullptr;
-    QComboBox *m_filterCombo = nullptr;
-
-    QLabel *m_endpointLabel = nullptr;
-    QLabel *m_clockLabel = nullptr;
-    QLabel *m_frameCountLabel = nullptr;
-
-    QAction *m_runAction = nullptr;
-    QAction *m_stepAction = nullptr;
-    QAction *m_themeAction = nullptr;
+    QTabWidget *m_tabs = nullptr;
+    QQuickWidget *m_curve = nullptr;
+    StatusStrip *m_status = nullptr;
 
     SignalTableModel *m_signalModel = nullptr;
     FrameTableModel *m_frameModel = nullptr;
 
     QString m_curveSignalId;
+    bool m_curveReady = false;
 };
 
 } // namespace protosim::ui

@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ProtoSim · 可交互原型 v2</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  :root{
+    --page:#f2f3f5; --ink:#12151a; --ink-dim:#5d6675;
+    --ui:"Microsoft YaHei UI","Segoe UI",system-ui,sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,monospace;
+  }
+  html,body{margin:0;background:var(--page);color:var(--ink);font-family:var(--ui);}
+  .stage{max-width:1360px;margin:0 auto;padding:28px 24px 48px;}
+  .stage-head{display:flex;align-items:baseline;gap:12px;margin-bottom:4px;}
+  .stage-head h1{font-size:17px;font-weight:650;margin:0;letter-spacing:-.01em;}
+  .stage-head .tagline{font-size:12.5px;color:var(--ink-dim);}
+  .hint{font-size:12px;color:var(--ink-dim);margin:0 0 14px;line-height:1.7;}
+  kbd{
+    font-family:var(--mono);font-size:11px;background:#e6e9ee;border:1px solid #d8dce3;
+    border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:#39404b;
+  }
+  .frame{width:1280px;max-width:100%;}
+
+  /* ---------------- 应用令牌 ---------------- */
+  .app{
+    width:1280px;height:820px;display:flex;flex-direction:column;overflow:hidden;
+    font-family:var(--ui);font-size:13px;line-height:1.45;
+    border:1px solid var(--line);border-radius:8px;
+    box-shadow:0 18px 40px -18px rgba(16,20,28,.28),0 2px 6px rgba(16,20,28,.06);
+    background:var(--bg);color:var(--text);
+    transition:background .18s ease,color .18s ease;
+  }
+  .app--dark{
+    --bg:#0f1114; --panel:#15181c; --panel-2:#191d22; --elev:#1e2329;
+    --line:#262b32; --line-soft:#1d2127;
+    --text:#e9ecf1; --dim:#8a94a3; --mute:#5c6675;
+    --accent:#4d8ff0; --accent-dim:rgba(77,143,240,.16);
+    --good:#57b98a; --warn:#d8a548; --bad:#e2595c;
+    --grid:#232830; --well:#0b0d10; --hover:#1b2027; --shadow:inset 0 1px 0 rgba(255,255,255,.02);
+  }
+  .app--light{
+    --bg:#eef1f5; --panel:#fff; --panel-2:#f7f9fc; --elev:#fff;
+    --line:#dde3ec; --line-soft:#eaeff6;
+    --text:#0f1620; --dim:#66738a; --mute:#9aa5b6;
+    --accent:#1668e3; --accent-dim:rgba(22,104,227,.09);
+    --good:#0f9c6c; --warn:#a9701a; --bad:#d33f3f;
+    --grid:#e6ebf2; --well:#f7f9fc; --hover:#f2f6fb; --shadow:none;
+  }
+
+  /* ---------------- 命令栏 ---------------- */
+  .cmdbar{height:56px;flex:0 0 56px;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:9px;min-width:230px;}
+  .mark{width:16px;height:16px;border-radius:3px;background:var(--accent);position:relative;flex:0 0 auto;}
+  .mark::after{content:"";position:absolute;inset:4px 4px auto 4px;height:2px;background:var(--bg);opacity:.85;}
+  .mark::before{content:"";position:absolute;inset:auto 4px 4px 4px;height:2px;background:var(--bg);opacity:.45;}
+  .brand-name{font-size:14px;font-weight:650;letter-spacing:-.01em;}
+  .brand-sub{font-size:12px;color:var(--dim);padding-left:9px;border-left:1px solid var(--line);}
+
+  .seg{display:flex;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px;gap:2px;}
+  .seg button{
+    appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12.5px;
+    padding:5px 14px;border-radius:4px;cursor:pointer;transition:background .12s,color .12s;
+  }
+  .seg button:hover{color:var(--text);}
+  .seg button[aria-pressed="true"]{background:var(--elev);color:var(--text);box-shadow:var(--shadow);font-weight:600;}
+  .seg button[aria-pressed="true"].is-run{color:var(--good);}
+
+  .field{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);}
+  .field select{
+    appearance:none;background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+    border-radius:5px;padding:5px 24px 5px 9px;font:inherit;font-size:12px;cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+    background-position:calc(100% - 13px) 11px,calc(100% - 9px) 11px;
+    background-size:4px 4px;background-repeat:no-repeat;
+  }
+  .spacer{flex:1;}
+
+  .chip{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);font-size:12px;color:var(--dim);}
+  .chip .proto{color:var(--text);font-weight:600;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--mute);flex:0 0 auto;}
+  .dot--live{background:var(--good);}
+  .dot--live.pulsing{animation:pulse 2s ease-out infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 45%,transparent);}
+    70%{box-shadow:0 0 0 6px color-mix(in srgb,var(--good) 0%,transparent);}
+    100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 0%,transparent);}
+  }
+
+  .ibtn{appearance:none;height:28px;padding:0 11px;border-radius:5px;border:1px solid var(--line);background:var(--panel-2);color:var(--dim);font:inherit;font-size:12px;cursor:pointer;transition:color .12s,border-color .12s;}
+  .ibtn:hover{color:var(--text);border-color:var(--mute);}
+
+  /* ---------------- 三栏 ---------------- */
+  .body{flex:1;display:flex;min-height:0;}
+  .rail{width:272px;flex:0 0 272px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;}
+  .rail-head{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 10px;}
+  .micro{font-size:10.5px;font-weight:650;letter-spacing:.1em;color:var(--mute);}
+  .count{font-size:11px;color:var(--dim);font-family:var(--mono);}
+
+  .device{margin:0 10px 10px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel-2);}
+  .device-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line-soft);}
+  .caret{color:var(--mute);font-size:9px;}
+  .device-name{font-weight:600;font-size:12.5px;flex:1;}
+  .tag{font-size:10px;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:1px 5px;background:var(--panel);}
+  .device-meta{padding:6px 10px 8px;font-size:11px;color:var(--mute);font-family:var(--mono);border-bottom:1px solid var(--line-soft);}
+  .signal-list{list-style:none;margin:0;padding:4px;}
+  .signal{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:4px;cursor:pointer;font-size:12.5px;color:var(--dim);position:relative;transition:background .12s,color .12s;}
+  .signal:hover{background:var(--hover);color:var(--text);}
+  .signal[aria-selected="true"]{background:var(--accent-dim);color:var(--text);font-weight:600;}
+  .signal[aria-selected="true"]::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;border-radius:2px;background:var(--accent);}
+  .signal .sig-name{flex:1;}
+  .addr{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:1px 5px;}
+  .rail-foot{margin-top:auto;padding:10px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--mute);font-family:var(--mono);}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;padding:12px 14px 0;gap:12px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+  .panel-head{height:38px;flex:0 0 38px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);}
+  .panel-head h2{margin:0;font-size:12.5px;font-weight:650;letter-spacing:.02em;}
+  .panel-head .hint{font-size:11px;color:var(--mute);}
+  .panel-head .right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+
+  /* 点表 */
+  .grid-wrap{flex:1;min-height:0;overflow:auto;}
+  table.grid{width:100%;border-collapse:collapse;table-layout:fixed;}
+  table.grid th{position:sticky;top:0;z-index:1;background:var(--panel);text-align:left;font-size:10.5px;font-weight:650;letter-spacing:.09em;color:var(--mute);padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  table.grid th.num,table.grid td.num{text-align:right;}
+  table.grid td{padding:0 12px;height:50px;border-bottom:1px solid var(--line-soft);vertical-align:middle;}
+  table.grid tbody tr{cursor:pointer;transition:background .1s;}
+  table.grid tbody tr:hover{background:var(--hover);}
+  table.grid tbody tr[aria-selected="true"]{background:var(--accent-dim);}
+  table.grid tbody tr[aria-selected="true"] td:first-child{box-shadow:inset 2px 0 0 var(--accent);}
+  .c-name{font-weight:600;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  .dim{color:var(--dim);} .mute{color:var(--mute);}
+
+  .c-value{text-align:right;position:relative;}
+  .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;font-weight:600;letter-spacing:-.02em;}
+  .unit{font-size:11px;color:var(--mute);margin-left:5px;font-family:var(--ui);}
+  .range{position:absolute;left:12px;right:12px;bottom:9px;height:3px;border-radius:2px;background:var(--line);}
+  .range b{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:color-mix(in srgb,var(--accent) 40%,transparent);transition:width .1s linear;}
+  .range::before,.range::after{content:"";position:absolute;top:-2px;width:1px;height:7px;background:var(--mute);opacity:.45;}
+  .range::before{left:0;} .range::after{right:0;}
+  .range i{position:absolute;top:50%;width:7px;height:7px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%);box-shadow:0 0 0 2.5px color-mix(in srgb,var(--bg) 70%,transparent);transition:left .1s linear;}
+
+  .q{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;padding:2px 8px 2px 7px;border-radius:999px;border:1px solid;}
+  .q i{width:5px;height:5px;border-radius:50%;}
+  .q-good{color:var(--good);border-color:color-mix(in srgb,var(--good) 34%,transparent);background:color-mix(in srgb,var(--good) 12%,transparent);}
+  .q-good i{background:var(--good);}
+  .q-oor{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 34%,transparent);background:color-mix(in srgb,var(--warn) 12%,transparent);}
+  .q-oor i{background:var(--warn);}
+
+  .force-btn{appearance:none;border:1px dashed var(--line);background:transparent;color:var(--mute);font:inherit;font-size:11px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .12s;}
+  .force-btn:hover{color:var(--text);border-color:var(--mute);}
+  .force-btn.is-on{color:var(--warn);border-style:solid;border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent);}
+
+  /* 底部 */
+  .bottom{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:6px 6px 0 0;border-bottom:0;overflow:hidden;}
+  .tabs{height:38px;flex:0 0 38px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);}
+  .tab{appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12.5px;padding:0 10px;height:37px;cursor:pointer;position:relative;}
+  .tab:hover{color:var(--text);}
+  .tab[aria-selected="true"]{color:var(--text);font-weight:600;}
+  .tab[aria-selected="true"]::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
+  .tabs .right{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--mute);}
+
+  .log{flex:1;min-height:0;overflow:auto;background:var(--well);scroll-behavior:auto;}
+  .log-row{display:grid;grid-template-columns:92px 50px 112px 34px minmax(340px,1.7fr) minmax(140px,.7fr) 60px;align-items:center;gap:10px;padding:0 14px;height:34px;border-bottom:1px solid var(--line-soft);font-size:12px;position:relative;}
+  .log-head{position:sticky;top:0;z-index:1;background:var(--well);height:30px;font-size:10.5px;font-weight:650;letter-spacing:.09em;color:var(--mute);border-bottom:1px solid var(--line);}
+  .log-row:not(.log-head):hover{background:var(--hover);}
+  .log-row.is-err{background:color-mix(in srgb,var(--bad) 8%,transparent);}
+  .log-row.is-err::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--bad);}
+  .log-row.enter{animation:rowIn .18s ease-out;}
+  @keyframes rowIn{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:none;}}
+  .dir{font-size:11.5px;font-weight:600;}
+  .dir-in{color:var(--accent);} .dir-out{color:var(--mute);}
+  .fc{font-family:var(--mono);font-size:11.5px;}
+  .hex{font-family:var(--mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hex .mbap{color:var(--mute);} .hex .unit{color:var(--dim);}
+  .hex .fc-b{color:var(--accent);font-weight:600;} .hex .data{color:var(--text);}
+  .hex .err-b{color:var(--bad);font-weight:600;}
+  .parse{color:var(--dim);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .parse .sig{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel-2);border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-left:4px;}
+  .ms{text-align:right;font-family:var(--mono);font-size:11px;color:var(--mute);}
+
+  .curve{flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px 0;}
+  .curve-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px;}
+  .curve-val{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums;}
+  .curve-val span{font-size:12px;color:var(--mute);font-family:var(--ui);margin-left:4px;}
+  .curve-meta{font-size:11px;color:var(--mute);font-family:var(--mono);}
+  .chart-wrap{flex:1;min-height:0;}
+  svg.chart{width:100%;height:100%;display:block;}
+
+  .statusbar{height:30px;flex:0 0 30px;display:flex;align-items:center;gap:18px;padding:0 14px;background:var(--panel);border-top:1px solid var(--line);font-size:11.5px;color:var(--dim);}
+  .st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+  .st b{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--text);font-weight:600;}
+  .sep{width:1px;height:12px;background:var(--line);}
+
+  .stage-foot{margin-top:14px;font-size:12px;color:var(--ink-dim);line-height:1.8;}
+  .stage-foot b{color:#0d1015;}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="stage-head">
+    <h1>ProtoSim 可交互原型 v2</h1>
+    <span class="tagline">真实 tick · 真实 hex · 按钮都能点</span>
+  </div>
+  <p class="hint">
+    先点几个地方试试：<kbd>空格</kbd> 运行/暂停、<kbd>→</kbd> 单步、切页签、右上角换主题、点左侧信号切曲线、点某行的「强制」看它冻住。
+    重点看两件事：<b>10Hz 刷新的数值会不会晃眼</b>、<b>曲线动起来会不会干扰读表</b>。
+  </p>
+
+  <div class="frame">
+    <div class="app app--dark" id="app">
+      <header class="cmdbar">
+        <div class="brand">
+          <span class="mark"></span>
+          <span class="brand-name">ProtoSim</span>
+          <span class="brand-sub">FieldLink 联调预设</span>
+        </div>
+
+        <div class="seg" role="group" aria-label="运行控制">
+          <button id="btnRun" class="is-run" aria-pressed="true">运行中</button>
+          <button id="btnPause" aria-pressed="false">暂停</button>
+          <button id="btnStep" aria-pressed="false">单步</button>
+        </div>
+
+        <label class="field">倍速
+          <select id="speed">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="5">5×</option>
+            <option value="10">10×</option>
+          </select>
+        </label>
+
+        <div class="spacer"></div>
+
+        <span class="chip">
+          <i class="dot dot--live pulsing" id="liveDot"></i>
+          <span class="proto">modbus</span>
+          <span class="mono">127.0.0.1:1502</span>
+        </span>
+        <button class="ibtn" id="btnExport">导出报文</button>
+        <button class="ibtn" id="btnTheme">浅色</button>
+      </header>
+
+      <div class="body">
+        <aside class="rail">
+          <div class="rail-head">
+            <span class="micro">设备树</span>
+            <span class="count">1 台 · 3 点</span>
+          </div>
+
+          <div class="device">
+            <div class="device-row">
+              <span class="caret">▼</span>
+              <span class="device-name">虚拟温控设备</span>
+              <span class="tag">RTU</span>
+            </div>
+            <div class="device-meta">dev-01 · unit 1</div>
+            <ul class="signal-list" id="railList">
+              <li class="signal" data-id="temperature" aria-selected="true"><span class="sig-name">温度</span><span class="addr">HR[0]</span></li>
+              <li class="signal" data-id="pressure" aria-selected="false"><span class="sig-name">压力</span><span class="addr">HR[2]</span></li>
+              <li class="signal" data-id="magic" aria-selected="false"><span class="sig-name">常量</span><span class="addr">HR[3]</span></li>
+            </ul>
+          </div>
+
+          <div class="rail-foot">fieldlink_preset.json · seed 20261111</div>
+        </aside>
+
+        <main class="main">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>点表</h2>
+              <span class="hint" id="tickHint">3 个信号 · 100ms tick</span>
+              <div class="right"><span class="hint">按 (unit, 区) 绑定</span></div>
+            </div>
+            <div class="grid-wrap">
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th style="width:132px">名称</th>
+                    <th style="width:160px">ID</th>
+                    <th style="width:96px">类型</th>
+                    <th style="width:150px" class="num">工程值</th>
+                    <th style="width:104px">质量</th>
+                    <th style="width:114px" class="num">时标</th>
+                    <th style="width:82px">强制</th>
+                  </tr>
+                </thead>
+                <tbody id="signalRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="bottom">
+            <div class="tabs">
+              <button class="tab" data-tab="log" aria-selected="true">报文</button>
+              <button class="tab" data-tab="curve" aria-selected="false">曲线</button>
+              <div class="right"><span id="logHint">最近 500 帧 · 完整记录可导出</span></div>
+            </div>
+            <div class="log" id="log"></div>
+            <div class="curve" id="curve" hidden>
+              <div class="curve-head">
+                <div>
+                  <div class="micro">实时曲线 · 最近 30 s</div>
+                  <div class="curve-val"><span id="curveValue">—</span><span id="curveUnit"></span></div>
+                </div>
+                <div class="curve-meta" id="curveMeta"></div>
+              </div>
+              <div class="chart-wrap">
+                <svg class="chart" id="chart" preserveAspectRatio="xMidYMid meet"></svg>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <footer class="statusbar">
+        <span class="st"><i class="dot dot--live" id="stDot"></i>端点 <span id="stState">Running</span></span>
+        <span class="sep"></span>
+        <span class="st">在线 <b id="stClients">1</b>/8</span>
+        <span class="st">收 <b id="stRx">0</b></span>
+        <span class="st">发 <b id="stTx">0</b></span>
+        <span class="st">异常 <b id="stErr">0</b></span>
+        <span class="spacer"></span>
+        <span class="st">报文 <b id="stFrames">0</b></span>
+        <span class="sep"></span>
+        <span class="st">仿真时钟 <b id="stClock">T+0.000s</b> · tick <b id="stTick">0</b></span>
+      </footer>
+    </div>
+  </div>
+
+  <p class="stage-foot">
+    原型里的数值、寄存器位、hex 都是真算出来的（float32 大端 + scale/offset），不是假数据；
+    报文以 1 秒虚拟时间为节拍产生，所以把倍速调到 10× 时能看到日志快速滚动。
+    行高、颜色、间距与静态稿一致，方便直接比对。
+  </p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------ 状态 ------------------------------ */
+  const TICK_MS = 100;
+  const LOG_EVERY_TICKS = 10;      // 每 1s 虚拟时间产生一对请求/响应
+
+  const state = {
+    running: true,
+    speed: 1,
+    virtualMs: 0,
+    ticks: 0,
+    rx: 0, tx: 0, err: 0, frames: 0,
+    txId: 0,
+    theme: 'dark',
+    tab: 'log',
+    selected: 'temperature',
+    timer: null,
+    series: { temperature: [], pressure: [], magic: [] },
+    lastLog: null,
+  };
+
+  /* ------------------------------ 信号定义 ------------------------------ */
+  const signals = {
+    temperature: {
+      name: '温度', id: 'temperature', type: 'float32', unit: '°C',
+      scale: 1, offset: 0, bytes: 4, regs: 2, addr: 0,
+      range: [15, 35], domain: [15, 35],
+      value: 25, quality: 'Good', forced: false,
+    },
+    pressure: {
+      name: '压力', id: 'pressure', type: 'uint16', unit: 'kPa',
+      scale: 0.1, offset: 0, bytes: 2, regs: 1, addr: 2,
+      range: [300, 700], domain: [300, 700],
+      value: 500, quality: 'Good', forced: false,
+    },
+    magic: {
+      name: '常量', id: 'magic', type: 'uint16', unit: '',
+      scale: 1, offset: 0, bytes: 2, regs: 1, addr: 3,
+      range: [0, 65535], domain: [0, 65535],
+      value: 42, quality: 'Good', forced: false,
+    },
+  };
+  const order = ['temperature', 'pressure', 'magic'];
+
+  /* ------------------------------ 仿真 ------------------------------ */
+  // 压力用带种子的随机游走，保证"同一份原型跑起来有性格但不至于乱跳"
+  let seed = 20261111;
+  function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+
+  function tick() {
+    state.virtualMs += TICK_MS;
+    state.ticks += 1;
+
+    const t = signals.temperature;
+    if (!t.forced) {
+      const angle = 2 * Math.PI * (state.virtualMs / 10000);
+      t.value = 25 + 10 * Math.sin(angle);
+      t.quality = 'Good';
+    }
+
+    const p = signals.pressure;
+    if (!p.forced && state.ticks % 5 === 0) {           // intervalMs = 500
+      p.value = Math.min(p.range[1], Math.max(p.range[0], p.value + (rnd() - 0.5) * 10));
+      p.quality = 'Good';
+    }
+
+    if (!signals.magic.forced) signals.magic.value = 42;
+
+    order.forEach(id => {
+      const s = signals[id];
+      const arr = state.series[id];
+      arr.push(s.value);
+      if (arr.length > 300) arr.shift();
+    });
+
+    if (state.ticks % LOG_EVERY_TICKS === 0) emitPoll();
+  }
+
+  /* ------------------------------ 编码 ------------------------------ */
+  function hex2(b) { return b.toString(16).toUpperCase().padStart(2, '0'); }
+
+  function f32Bytes(v) {
+    const buf = new ArrayBuffer(4);
+    new DataView(buf).setFloat32(0, v, false);   // big-endian = ABCD
+    return Array.from(new Uint8Array(buf));
+  }
+  function u16Bytes(v) {
+    const n = Math.max(0, Math.min(65535, Math.round(v))) & 0xffff;
+    return [(n >> 8) & 0xff, n & 0xff];
+  }
+  function rawOf(s) { return Math.round(s.value / s.scale - s.offset / s.scale); }
+
+  function registersOf(id) {
+    const s = signals[id];
+    if (id === 'temperature') return f32Bytes(s.value);
+    return u16Bytes(rawOf(s));
+  }
+
+  /* ------------------------------ 报文 ------------------------------ */
+  const logEl = document.getElementById('log');
+
+  function buildLogHead() {
+    const head = document.createElement('div');
+    head.className = 'log-row log-head';
+    head.innerHTML = '<span>时间</span><span>方向</span><span>客户端</span><span>FC</span>'
+      + '<span>报文（hex）</span><span>解析</span><span style="text-align:right">耗时</span>';
+    logEl.appendChild(head);
+  }
+
+  let msCursor = Math.floor(Math.random() * 700);
+  function nowLabel() {
+    msCursor = (msCursor + 1 + Math.floor(Math.random() * 3)) % 1000;
+    const base = new Date();
+    const hhmmss = base.toTimeString().slice(0, 8);
+    // 秒数跟着帧数走，毫秒逐行微增，避免几十行时间戳一模一样
+    const sec = String((base.getSeconds() + Math.floor(msCursor / 1000)) % 60).padStart(2, '0');
+    return hhmmss.slice(0, 6) + sec + '.' + String(msCursor).padStart(3, '0');
+  }
+
+  function addRow(opts) {
+    const row = document.createElement('div');
+    row.className = 'log-row enter' + (opts.error ? ' is-err' : '');
+    row.innerHTML =
+      '<span class="mono dim">' + opts.time + '</span>' +
+      '<span class="dir ' + (opts.inbound ? 'dir-in' : 'dir-out') + '">' + (opts.inbound ? '→ 收' : '← 发') + '</span>' +
+      '<span class="mono mute">' + (opts.error ? '127.0.0.1:52344' : '127.0.0.1:52344') + '</span>' +
+      '<span class="fc">' + opts.fcLabel + '</span>' +
+      '<span class="hex">' + opts.hex + '</span>' +
+      '<span class="parse">' + opts.parse + '</span>' +
+      '<span class="ms">' + (opts.ms || '—') + '</span>';
+    logEl.appendChild(row);
+    while (logEl.children.length > 60) logEl.removeChild(logEl.children[1]);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  let anomalyToggle = false;
+
+  function emitPoll() {
+    state.txId = (state.txId + 1) & 0xffff;
+    const tx = state.txId.toString(16).toUpperCase().padStart(4, '0');
+    const t = Math.random() < 0.12 ? 'anomaly' : 'normal';
+
+    // 请求：FC03 读 HR[0..3]
+    addRow({
+      time: nowLabel(), inbound: true, fcLabel: '03',
+      hex: '<span class="mbap">' + tx + ' 0000 0006</span> <span class="unit">01</span> '
+         + '<span class="fc-b">03</span> <span class="data">0000 0004</span>',
+      parse: '读 HR[0..3] · 3 点',
+    });
+    state.rx++; state.frames++;
+
+    // 响应：把三个信号的真实寄存器拼出来
+    const tBytes = registersOf('temperature');
+    const pBytes = registersOf('pressure');
+    const mBytes = registersOf('magic');
+    const data = [0x08, ...tBytes, ...pBytes, ...mBytes];
+    const len = (3 + data.length).toString(16).toUpperCase().padStart(4, '0');
+    const dataHex = data.map(hex2).join(' ')
+      .replace(/^08 /, '08 ');
+
+    const ms = (0.4 + Math.random() * 0.9).toFixed(2);
+    addRow({
+      time: nowLabel(), inbound: false, fcLabel: '03',
+      hex: '<span class="mbap">' + tx + ' 0000 ' + len + '</span> <span class="unit">01</span> '
+         + '<span class="fc-b">03</span> <span class="data">' + dataHex + '</span>',
+      parse: '8 字节',
+      ms: ms + ' ms',
+    });
+    state.tx++; state.frames++;
+
+    if (t === 'anomaly') {
+      state.txId = (state.txId + 1) & 0xffff;
+      const tx2 = state.txId.toString(16).toUpperCase().padStart(4, '0');
+      addRow({
+        time: nowLabel(), inbound: true, fcLabel: '03', error: true,
+        hex: '<span class="mbap">' + tx2 + ' 0000 0006</span> <span class="unit">01</span> '
+           + '<span class="fc-b">03</span> <span class="data">9C40 0001</span>',
+        parse: 'HR[40000] 未映射',
+      });
+      state.rx++; state.frames++; state.err++;
+
+      addRow({
+        time: nowLabel(), inbound: false, fcLabel: '83', error: true,
+        hex: '<span class="mbap">' + tx2 + ' 0000 0003</span> <span class="unit">01</span> '
+           + '<span class="err-b">83 02</span>',
+        parse: '0x02 地址非法',
+        ms: (0.3 + Math.random() * 0.4).toFixed(2) + ' ms',
+      });
+      state.tx++; state.frames++; state.err++;
+    }
+  }
+
+  /* ------------------------------ 点表渲染 ------------------------------ */
+  const rowsEl = document.getElementById('signalRows');
+
+  function rangePct(s) {
+    const [lo, hi] = s.domain;
+    return Math.max(0, Math.min(100, (s.value - lo) / (hi - lo) * 100));
+  }
+
+  function fmt(s) {
+    if (s.id === 'temperature') return s.value.toFixed(3);
+    if (s.id === 'pressure') return s.value.toFixed(2);
+    return String(Math.round(s.value));
+  }
+
+  function buildRows() {
+    rowsEl.innerHTML = '';
+    order.forEach(id => {
+      const s = signals[id];
+      const tr = document.createElement('tr');
+      tr.dataset.id = id;
+      tr.setAttribute('aria-selected', id === state.selected ? 'true' : 'false');
+      tr.innerHTML =
+        '<td class="c-name">' + s.name + '</td>' +
+        '<td class="mono dim">' + s.id + '</td>' +
+        '<td class="mono dim">' + s.type + '</td>' +
+        '<td class="c-value"><span class="val"></span><span class="unit">' + s.unit + '</span>' +
+          '<span class="range"><b></b><i></i></span></td>' +
+        '<td><span class="q q-good"><i></i>Good</span></td>' +
+        '<td class="num mono dim"></td>' +
+        '<td><button class="force-btn">强制</button></td>';
+      tr.addEventListener('click', e => {
+        if (e.target.classList.contains('force-btn')) return;
+        selectSignal(id);
+      });
+      tr.querySelector('.force-btn').addEventListener('click', () => toggleForce(id));
+      rowsEl.appendChild(tr);
+    });
+  }
+
+  function renderRows() {
+    order.forEach((id, i) => {
+      const s = signals[id];
+      const tr = rowsEl.children[i];
+      if (!tr) return;
+      tr.setAttribute('aria-selected', id === state.selected ? 'true' : 'false');
+      tr.querySelector('.val').textContent = fmt(s);
+      const pct = rangePct(s);
+      tr.querySelector('.range b').style.width = pct + '%';
+      tr.querySelector('.range i').style.left = pct + '%';
+
+      const q = tr.querySelector('.q');
+      const cls = s.quality === 'Good' ? 'q-good' : 'q-oor';
+      q.className = 'q ' + cls;
+      q.innerHTML = '<i></i>' + s.quality;
+
+      tr.querySelector('td.num').textContent = 'T+' + (state.virtualMs / 1000).toFixed(3) + 's';
+
+      const btn = tr.querySelector('.force-btn');
+      btn.classList.toggle('is-on', s.forced);
+      btn.textContent = s.forced ? '已强制' : '强制';
+    });
+  }
+
+  function toggleForce(id) {
+    const s = signals[id];
+    s.forced = !s.forced;
+    if (s.forced) {
+      // 强制值取当前值，冻结
+      s.frozenAt = s.value;
+    }
+    renderRows();
+    renderCurveHead();
+  }
+
+  function selectSignal(id) {
+    state.selected = id;
+    renderRows();
+    renderCurveHead();
+    drawChart();
+  }
+
+  /* ------------------------------ 曲线 ------------------------------ */
+  const NS = 'http://www.w3.org/2000/svg';
+  const chart = document.getElementById('chart');
+  const curveValue = document.getElementById('curveValue');
+  const curveUnit = document.getElementById('curveUnit');
+  const curveMeta = document.getElementById('curveMeta');
+
+  function renderCurveHead() {
+    const s = signals[state.selected];
+    curveValue.textContent = fmt(s);
+    curveUnit.textContent = s.unit;
+    curveMeta.textContent = s.name + ' · HR[' + s.addr + '] · ' + s.type
+      + ' · 量程 ' + s.range[0] + '~' + s.range[1] + (s.forced ? ' · 已强制' : '');
+  }
+
+  function el(name, attrs) {
+    const n = document.createElementNS(NS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  function drawChart() {
+    const s = signals[state.selected];
+    const vals = state.series[state.selected];
+    if (!vals.length) return;
+
+    const W = 900, H = 240, padL = 40, padR = 12, padT = 14, padB = 26;
+    chart.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    while (chart.firstChild) chart.removeChild(chart.firstChild);
+
+    const [dmin, dmax] = s.domain;
+    let lo = Math.min(dmin, Math.min(...vals));
+    let hi = Math.max(dmax, Math.max(...vals));
+    if (hi - lo < 1e-6) hi = lo + 1;
+
+    const iw = W - padL - padR, ih = H - padT - padB;
+    const N = 300;                                   // 固定 30s 窗口，曲线从右往左生长
+    const x = i => padL + iw * (N - vals.length + i) / (N - 1);
+    const y = v => padT + ih - ih * (v - lo) / (hi - lo);
+
+    for (let g = 0; g <= 4; g++) {
+      const gy = padT + ih * g / 4;
+      chart.appendChild(el('line', { x1: padL, x2: W - padR, y1: gy, y2: gy, stroke: 'var(--grid)', 'stroke-width': 1, 'shape-rendering': 'crispEdges' }));
+      const label = el('text', { x: padL - 8, y: gy + 3.5, 'text-anchor': 'end', fill: 'var(--mute)', 'font-size': 10.5, 'font-family': 'var(--mono)' });
+      label.textContent = (lo + (hi - lo) * (1 - g / 4)).toFixed(0);
+      chart.appendChild(label);
+    }
+
+    let line = '', area = '';
+    for (let i = 0; i < vals.length; i++) {
+      const px = x(i).toFixed(2), py = y(vals[i]).toFixed(2);
+      line += (i ? ' L ' : 'M ') + px + ' ' + py;
+      area += (i ? ' L ' : 'M ') + px + ' ' + py;
+    }
+    if (vals.length > 1) {
+      area += ' L ' + x(vals.length - 1).toFixed(2) + ' ' + (padT + ih)
+            + ' L ' + x(0).toFixed(2) + ' ' + (padT + ih) + ' Z';
+    }
+
+    const gid = 'grad-' + state.selected;
+    const defs = el('defs', {});
+    const grad = el('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 });
+    grad.appendChild(el('stop', { offset: '0%', 'stop-color': 'var(--accent)', 'stop-opacity': .22 }));
+    grad.appendChild(el('stop', { offset: '100%', 'stop-color': 'var(--accent)', 'stop-opacity': 0 }));
+    defs.appendChild(grad);
+    chart.appendChild(defs);
+    if (vals.length > 1) chart.appendChild(el('path', { d: area, fill: 'url(#' + gid + ')' }));
+    chart.appendChild(el('path', { d: line, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 1.8, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+
+    const lx = x(vals.length - 1), ly = y(vals[vals.length - 1]);
+    chart.appendChild(el('circle', { cx: lx, cy: ly, r: 7, fill: 'var(--accent)', opacity: .16 }));
+    chart.appendChild(el('circle', { cx: lx, cy: ly, r: 3, fill: 'var(--accent)' }));
+
+    ['-30s', '-20s', '-10s', '现在'].forEach((t, idx) => {
+      const tx = padL + iw * idx / 3;
+      const node = el('text', {
+        x: tx, y: H - 8,
+        'text-anchor': idx === 0 ? 'start' : (idx === 3 ? 'end' : 'middle'),
+        fill: 'var(--mute)', 'font-size': 10.5, 'font-family': 'var(--mono)'
+      });
+      node.textContent = t;
+      chart.appendChild(node);
+    });
+  }
+
+  /* ------------------------------ 状态栏 ------------------------------ */
+  function renderStatus() {
+    document.getElementById('stRx').textContent = state.rx.toLocaleString();
+    document.getElementById('stTx').textContent = state.tx.toLocaleString();
+    document.getElementById('stErr').textContent = state.err;
+    document.getElementById('stFrames').textContent = state.frames.toLocaleString();
+    document.getElementById('stClock').textContent = 'T+' + (state.virtualMs / 1000).toFixed(3) + 's';
+    document.getElementById('stTick').textContent = state.ticks.toLocaleString();
+    document.getElementById('stState').textContent = state.running ? 'Running' : 'Paused';
+    const dot = document.getElementById('stDot');
+    dot.className = 'dot ' + (state.running ? 'dot--live' : '');
+    const liveDot = document.getElementById('liveDot');
+    liveDot.classList.toggle('pulsing', state.running);
+    document.getElementById('tickHint').textContent = '3 个信号 · ' + TICK_MS + 'ms tick · ' + state.speed + '×';
+  }
+
+  /* ------------------------------ 循环 ------------------------------ */
+  function stepOnce() {
+    tick();
+    renderRows();
+    renderStatus();
+    if (state.tab === 'curve') { renderCurveHead(); drawChart(); }
+  }
+
+  function schedule() {
+    clearInterval(state.timer);
+    if (!state.running) return;
+    state.timer = setInterval(stepOnce, Math.max(10, TICK_MS / state.speed));
+  }
+
+  function setRunning(v) {
+    state.running = v;
+    document.getElementById('btnRun').setAttribute('aria-pressed', String(v));
+    document.getElementById('btnPause').setAttribute('aria-pressed', String(!v));
+    state.timer && clearInterval(state.timer);
+    schedule();
+    renderStatus();
+  }
+
+  /* ------------------------------ 交互 ------------------------------ */
+  document.getElementById('btnRun').addEventListener('click', () => setRunning(true));
+  document.getElementById('btnPause').addEventListener('click', () => setRunning(false));
+  document.getElementById('btnStep').addEventListener('click', () => { setRunning(false); stepOnce(); });
+
+  document.getElementById('speed').addEventListener('change', e => {
+    state.speed = parseFloat(e.target.value);
+    if (state.running) schedule();
+    renderStatus();
+  });
+
+  document.getElementById('btnTheme').addEventListener('click', e => {
+    const app = document.getElementById('app');
+    const toLight = app.classList.contains('app--dark');
+    app.classList.toggle('app--dark', !toLight);
+    app.classList.toggle('app--light', toLight);
+    e.currentTarget.textContent = toLight ? '深色' : '浅色';
+    if (state.tab === 'curve') drawChart();
+  });
+
+  document.getElementById('btnExport').addEventListener('click', e => {
+    const btn = e.currentTarget;
+    btn.textContent = '已导出 ✓';
+    setTimeout(() => { btn.textContent = '导出报文'; }, 1200);
+  });
+
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const name = tab.dataset.tab;
+      state.tab = name;
+      document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t === tab)));
+      document.getElementById('log').hidden = name !== 'log';
+      document.getElementById('curve').hidden = name !== 'curve';
+      document.getElementById('logHint').textContent = name === 'log'
+        ? '最近 500 帧 · 完整记录可导出'
+        : '最近 30 s · 固定量程';
+      if (name === 'curve') { renderCurveHead(); drawChart(); }
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT') return;
+    if (e.code === 'Space') { e.preventDefault(); setRunning(!state.running); }
+    if (e.code === 'ArrowRight') { e.preventDefault(); setRunning(false); stepOnce(); }
+  });
+
+  /* ------------------------------ 启动 ------------------------------ */
+  const params = new URLSearchParams(location.search);
+
+  buildLogHead();
+  buildRows();
+  renderRows();
+  renderStatus();
+
+  // 预热：先跑 120 tick，让曲线一打开就有内容（相当于"已经连了一会儿"）
+  for (let i = 0; i < 120; i++) tick();
+  renderRows();
+  renderStatus();
+  renderCurveHead();
+  drawChart();
+
+  if (params.get('theme') === 'light') {
+    const app = document.getElementById('app');
+    app.classList.remove('app--dark');
+    app.classList.add('app--light');
+    document.getElementById('btnTheme').textContent = '深色';
+  }
+  if (params.get('tab') === 'curve') {
+    document.querySelector('.tab[data-tab="curve"]').click();
+  }
+  if (params.get('paused') === '1') setRunning(false);
+
+  // 默认视图：报文（先看最核心的），曲线页签点了才画
+  schedule();
+  setInterval(() => { if (state.tab === 'curve' && state.running) drawChart(); }, 120);
+})();
+</script>
+</body>
+</html>

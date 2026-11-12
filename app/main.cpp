@@ -85,6 +85,18 @@ int main(int argc, char *argv[])
         QStringLiteral("path"));
     parser.addOption(screenshotOption);
 
+    const QCommandLineOption screenshotDelayOption(
+        QStringLiteral("screenshot-delay"),
+        QStringLiteral("截图前等待的毫秒数（默认 1800，用于先跑出一些流量）"),
+        QStringLiteral("ms"), QStringLiteral("1800"));
+    parser.addOption(screenshotDelayOption);
+
+    const QCommandLineOption tabOption(
+        QStringLiteral("tab"),
+        QStringLiteral("启动后停在哪个页签：frames（默认）或 curve"),
+        QStringLiteral("name"), QStringLiteral("frames"));
+    parser.addOption(tabOption);
+
     const QCommandLineOption themeOption(
         QStringLiteral("theme"),
         QStringLiteral("启动主题：dark（默认）或 light"),
@@ -165,13 +177,16 @@ int main(int argc, char *argv[])
     protosim::ui::MainWindow window(context, &themeBridge);
     window.setBundle(bundle);
     window.setDarkTheme(darkTheme);
+    if (parser.value(tabOption) == QLatin1String("curve"))
+        window.showCurveTab();
     window.show();
 
     window.startSimulation();
 
     if (parser.isSet(screenshotOption)) {
         const QString target = parser.value(screenshotOption);
-        QTimer::singleShot(1800, &window, [&window, target] {
+        const int delay = qMax(200, parser.value(screenshotDelayOption).toInt());
+        QTimer::singleShot(delay, &window, [&window, target] {
             const bool saved = window.grab().save(target);
             ::fprintf(saved ? stdout : stderr, "screenshot -> %s\n", target.toUtf8().constData());
             QCoreApplication::quit();

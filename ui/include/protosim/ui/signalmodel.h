@@ -11,8 +11,8 @@
 
 namespace protosim::ui {
 
-/// 点表：直接读 DataBank 快照，不另做缓存层。
-/// 每个 tick 只刷新变化的行，避免整表重绘拖慢 UI。
+/// 点表模型。除了显示文本，还把「数值 / 量程 / 质量 / 强制」拆成独立角色，
+/// 让委托能画量程条和胶囊，而不用去解析字符串。
 class SignalTableModel : public QAbstractTableModel
 {
     Q_OBJECT
@@ -21,14 +21,25 @@ public:
     enum Column {
         NameColumn,
         IdColumn,
-        DeviceColumn,
         TypeColumn,
         ValueColumn,
-        UnitColumn,
         QualityColumn,
         TimestampColumn,
-        ForcedColumn,
+        ForceColumn,
         ColumnCount,
+    };
+
+    enum Role {
+        SignalIdRole = Qt::UserRole + 1,
+        ValueRole,
+        UnitRole,
+        QualityRole,
+        ForcedRole,
+        RangeMinRole,
+        RangeMaxRole,
+        HasRangeRole,
+        TimestampMsRole,
+        CategoryRole,
     };
 
     explicit SignalTableModel(DataBank *bank, QObject *parent = nullptr);
@@ -39,12 +50,9 @@ public:
     QVariant headerData(int section, Qt::Orientation orientation,
                         int role = Qt::DisplayRole) const override;
 
-    /// 装载点表后整体重建。
     void refresh();
-
     QString signalIdAt(int row) const;
-
-    void setTokens(const ThemeTokens &tokens);
+    int rowOf(const QString &signalId) const;
 
 public Q_SLOTS:
     void onSignalChanged(const protosim::SignalChange &change);
@@ -54,7 +62,6 @@ private:
     QStringList m_ids;
     QVector<SignalSnapshot> m_snapshots;
     QHash<QString, int> m_rowOf;
-    ThemeTokens m_tokens = darkTokens();
 };
 
 } // namespace protosim::ui

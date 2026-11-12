@@ -267,6 +267,7 @@ Linux 版本在 P0 之后单独立项。**P0 的 CI 只跑 Windows x64 + MSVC**�
 - `docs/INTERFACES.md` — `IProtocolAdapter` 接口契约（统一写回管线、Worker IPC、capabilities 驱动 UI）
 - `docs/P0_PLAN.md` — P0 任务拆解与 19 条验收用例
 - `docs/P0_OPEN_QUESTIONS.md` — P0 落地中的冲突、偏离与待拍板事项
+- `docs/design/` — 界面改版设计稿（静态稿 + 可交互原型）与落地记录
 
 **P0 已落地**：`sim-core` 数据模型 / 确定性仿真 / 配置包校验 / Modbus TCP（8 功能码 + 异常码）/ 统一写回管线 / 报文日志 / UI 骨架 / 三层测试 / `--selftest` / 绿色包全部完成。
 落地过程中遇到的规格冲突与偏离，逐条记录在 `docs/P0_OPEN_QUESTIONS.md`（含 5 条待拍板项）。
