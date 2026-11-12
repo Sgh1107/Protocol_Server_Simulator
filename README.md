@@ -141,9 +141,26 @@ build\bin\ProtoSim.exe --selftest
 
 | 命令 | 内容 |
 | --- | --- |
+| `bash tools/check.sh` | **提交前敲这个**：配置包校验 → 编译（WERROR，与 CI 同款参数）→ ctest → `--selftest`，一条命令全绿才算可提交 |
+| `bash tools/check.sh --fast` | 跳过 CMake 配置（没动 `CMakeLists.txt` 时用） |
 | `ctest --test-dir build -C Release` | L1 纯逻辑 + L2 假主站 E2E，共 9 个测试程序 |
 | `build\bin\ProtoSim.exe --selftest` | 9 项内置自检，退出码 0 表示全通过 |
 | `python tools/validate_config.py` | 配置包 JSON Schema 校验 |
+
+**分支与提交流程**（单人开发 + AI 协作，`main` 不允许直推）：
+
+```bat
+git switch main && git pull
+git switch -c feat/p1-rtu          :: 每件事一个短分支
+bash tools/check.sh                :: 本地先过一遍，别让 CI 当第一道关
+git add -A && git commit -m "..."
+git push -u origin feat/p1-rtu     :: 然后开 PR，CI 跑在 PR 上
+:: PR 页面：等 Windows 作业绿 -> Squash and merge -> 删分支
+git switch main && git pull
+```
+
+只想快速看 CI、不想开 PR（例如调 workflow 本身）：开 `ci/xxx` 分支 push 即可，`main` 与 `ci/**` 都会触发 CI，
+其余分支只在开 PR 时跑。合并后建议在 GitHub 仓库设置里打开 *Automatically delete head branches*。
 
 **打绿色包**（QML 必须带 `--qmldir`，否则运行时缺 QML 模块）：
 

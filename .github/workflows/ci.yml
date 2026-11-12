@@ -13,11 +13,21 @@
 
 name: CI
 
+# 触发设计（单人开发 + AI 协作）：
+#   - main 只在合并 PR 时跑，任何人不得直推 -> main 上不可能出现红提交
+#   - pull_request 是日常反馈通道，CI 结果挂在 PR 里
+#   - ci/** 是"只想快速看 CI、不想开 PR"的临时分支（例如调 workflow 本身）
+#   - 刻意不用 paths-ignore：它和"必过检查"冲突（文档 PR 会被判 Expected 而卡住合并）
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/**']
   pull_request:
   workflow_dispatch:
+
+# 同一分支连续推送自动取消上一次，省时间也省分钟
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   windows:
