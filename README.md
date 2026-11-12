@@ -1,6 +1,10 @@
 # ProtoSim — 工业协议服务端模拟器（暂定名）
 
-> **当前状态：P0 已落地可运行。** `sim-core` / Modbus TCP 服务端 / 统一写回管线 / 报文日志 / Widgets+QML 界面全部就位，`ctest` 9 项全绿、`--selftest` 9 项通过、绿色 zip 已能产出。P1 起的内容（RTU、多 unit、MQTT、SQLite、故障注入）尚未开始。
+> **当前状态：P0 已收官（2026-11-12）。** 单协议闭环打通并已在 **FieldLink 上实测通过**：
+> 主站连 `127.0.0.1:1502` 读到 15~35 周期的正弦温度，FC16 写入后 FC03 回读一致，异常请求回 `0x02`。
+> 界面已按 `docs/design/` 的设计稿重做为仪器面板风格（自绘委托、量程条、hex 分色、图标集），
+> `ctest` **10 项**全绿、`--selftest` 9 项通过；绿色 zip 已在**干净 Windows** 上解压即跑。
+> P1 起的内容（RTU、多 unit、MQTT、故障注入、SQLite、**设备/端点管理**）尚未开始。
 
 > 决策依据：`docs/SERVER_SIMULATOR_PROPOSAL.md`（v0.1 立项方案）、`docs/TECH_STACK_DECISIONS.md`（v0.5 技术基线与依赖决策）、`docs/P0_PLAN.md`（P0 任务与验收）。
 
@@ -143,7 +147,7 @@ build\bin\ProtoSim.exe --selftest
 | --- | --- |
 | `bash tools/check.sh` | **提交前敲这个**：配置包校验 → 编译（WERROR，与 CI 同款参数）→ ctest → `--selftest`，一条命令全绿才算可提交 |
 | `bash tools/check.sh --fast` | 跳过 CMake 配置（没动 `CMakeLists.txt` 时用） |
-| `ctest --test-dir build -C Release` | L1 纯逻辑 + L2 假主站 E2E，共 9 个测试程序 |
+| `ctest --test-dir build -C Release` | L1 纯逻辑 + L2 假主站 E2E，共 **10** 个测试程序（含表头约束用例） |
 | `build\bin\ProtoSim.exe --selftest` | 9 项内置自检，退出码 0 表示全通过 |
 | `python tools/validate_config.py` | 配置包 JSON Schema 校验 |
 
@@ -196,23 +200,28 @@ python tools/package.py --qt D:/programming/Qt/6.6.3/msvc2019_64
 
 ```
 ProtoSim/
-├── cmake/                 # ProjectVersions.cmake（Qt 版本集中配置）
-├── sim-core/              # 纯 Qt/C++，不链接任何协议库
-│                          # SignalModel · DataBank · SimulationEngine
-│                          # Scenario/Curve/Script(QJSEngine) · FaultInjector
-│                          # ConfigBundle · TelemetryLog · IResultStore
-├── adapters/              # IProtocolAdapter 及进程内适配器（Modbus / MQTT）
-├── workers/               # 104 / 61850 独立 Worker 进程（P2/P3）
-├── ui/
-│   ├── widgets/           # 点表 / hex 报文 / 设备树 / 多页签（QSS 主题）
-│   └── qml/               # 场景时间轴 / 曲线 / 演示动画（Qt Quick palette 主题）
-├── config/                # 配置包 JSON Schema（带 schemaVersion）、预设场景
-├── tests/                 # 三层测试：纯逻辑 / 假主站 E2E / FieldLink 真实互验
-├── tools/                 # Python 验收脚本（不进运行时）
-├── third_party/           # git submodule：lib60870-C、libiec61850 …
-├── platform/              # 平台差异隔离（Win32 MiniDump、防火墙规则等）
-├── LICENSE                # GPL-3.0-or-later
-└── THIRD_PARTY_NOTICES.md # 第三方组件许可证与版权声明（待补）
+├── cmake/                  # Qt 版本基线（唯一真相源）+ 统一编译选项
+├── sim-core/               # 纯逻辑，只链 Qt6::Core
+│   ├── include/protosim/   # signal · databank · configbundle · simulationengine
+│   │                       # curve · telemetrylog · eventbus · writepipeline · iprotocoladapter
+│   └── src/
+├── adapters/               # 唯一允许链接 Qt SerialBus 的地方
+│   ├── modbusframe.*       # ADU/PDU 编解码（纯函数，单测好写）
+│   ├── modbustap.*         # 帧观察层：连接上限 + 原始 hex + 客户端归属
+│   └── modbusadapter.*     # IProtocolAdapter 实现（8 功能码 + 异常码）
+├── ui/                     # Widgets 主体 + QML 局部
+│   ├── include/protosim/ui/  theme · delegates · commandbar · signalrail
+│   │                         statusstrip · proportionalheaderview · 两个 model
+│   ├── qml/CurveView.qml   # 曲线（Y 轴固定在工作带）
+│   └── resources/          # 图标（tools/make_icons.py 生成）+ app.ico
+├── app/                    # main.cpp（装配）+ selftest.cpp（9 项自检）+ app.rc
+├── config/                 # JSON Schema + FieldLink 预设场景
+├── tests/                  # unit（10 个）+ e2e（假主站）
+├── tools/                  # check.sh · package.py · make_icons.py · validate_config.py
+├── docs/                   # 立项方案 · 技术决策 · P0 计划 · 遗留问题 · design/
+├── .github/                # CI（Windows only）+ PR 模板
+├── LICENSE                 # GPL-3.0-or-later
+└── THIRD_PARTY_NOTICES.md  # 第三方组件许可证与版权声明
 ```
 
 ---
@@ -246,7 +255,7 @@ Linux 版本在 P0 之后单独立项。**P0 的 CI 只跑 Windows x64 + MSVC**�
 
 | 项 | 说明 |
 | --- | --- |
-| P0 已落地、P1 未开始 | 当前只有 Modbus TCP 单协议闭环；RTU、多 unit、MQTT、SQLite、故障注入均为 P1+ |
+| P0 已收官、P1 未开始 | 只有 Modbus TCP 单协议闭环；RTU、多 unit、MQTT、SQLite、故障注入、设备/端点管理均为 P1+ |
 | **Qt 6.6.3 已 EOL** | 非 LTS、开源支持 2024-04-02 结束、无安全补丁；**已决定知情接受、暂不升级**，待 6.12 稳定后按 §3.5 五条判定标准于阶段边界切换；开源版 LTS 后续补丁为商业专属，以在线安装器实际可见版本为准 |
 | lib60870 版本红线 | 必须 2.4.1+；2.4.0 及更早存在高危 CVE |
 | TLS 默认关闭 | mbedTLS 2.28 线已停止维护，P2 默认不编 TLS、不引入该库 |
@@ -269,7 +278,11 @@ Linux 版本在 P0 之后单独立项。**P0 的 CI 只跑 Windows x64 + MSVC**�
 - `docs/P0_OPEN_QUESTIONS.md` — P0 落地中的冲突、偏离与待拍板事项
 - `docs/design/` — 界面改版设计稿（静态稿 + 可交互原型）与落地记录
 
-**P0 已落地**：`sim-core` 数据模型 / 确定性仿真 / 配置包校验 / Modbus TCP（8 功能码 + 异常码）/ 统一写回管线 / 报文日志 / UI 骨架 / 三层测试 / `--selftest` / 绿色包全部完成。
-落地过程中遇到的规格冲突与偏离，逐条记录在 `docs/P0_OPEN_QUESTIONS.md`（含 5 条待拍板项）。
+**P0 已收官**：`sim-core` 数据模型 / 确定性仿真 / 配置包校验 / Modbus TCP（8 功能码 + 异常码）/ 统一写回管线 /
+报文日志 / 仪器面板风格界面 / 10 项 ctest / `--selftest` / 绿色包，全部完成并在 FieldLink 上实测通过。
+落地过程中的规格冲突与偏离逐条记录在 `docs/P0_OPEN_QUESTIONS.md`。
 
-**尚待确认（按推荐默认值执行，不阻塞 P0）**：MQTT 客户端是否走自研 codec、项目定位权重（测试替身 / 演示）、P2 的 104 功能范围与验收主站、仓库正式命名、`sim-core` 是否抽成 submodule。
+**P1 起手要先定的三件事**（不阻塞 P0 归档）：
+1. 写语义口径（原始寄存器 vs 工程值）与地址重叠是否允许别名；
+2. 场景编辑器范围（端点设置 + 设备增删启用 + 配置写回 JSON）；
+3. MQTT 只做客户端上报（外挂 Mosquitto），内置 mini Broker 推迟到 P2。
