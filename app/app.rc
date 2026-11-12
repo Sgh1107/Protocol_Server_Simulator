@@ -1,0 +1,3 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// 给 exe 嵌图标（资源管理器里显示的那个），窗口图标在 main.cpp 里 setWindowIcon
+IDI_ICON1 ICON "../ui/resources/app.ico"

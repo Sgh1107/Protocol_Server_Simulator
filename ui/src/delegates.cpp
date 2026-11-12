@@ -156,7 +156,11 @@ void SignalTableDelegate::paint(QPainter *painter, const QStyleOptionViewItem &o
             const double ratio =
                 qFuzzyIsNull(span) ? 0.0 : qBound(0.0, (value - lo) / span, 1.0);
 
-            const QRect track(cell.left() + kCellPadX, cell.bottom() - 11, cell.width() - 2 * kCellPadX, 3);
+            // 列被拖宽时量程条不能无限拉长，否则读起来像分割线；
+            // 限宽 150 并右对齐到数值下方，保持"这是某个值的位置"这层语义。
+            const int trackWidth = qMin(cell.width() - 2 * kCellPadX, 150);
+            const QRect track(cell.right() - kCellPadX - trackWidth, cell.bottom() - 11,
+                              trackWidth, 3);
             painter->setPen(Qt::NoPen);
             painter->setBrush(m_tokens.border);
             painter->drawRoundedRect(track, 1.5, 1.5);
@@ -298,7 +302,15 @@ void FrameTableDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     painter->drawLine(cell.left(), cell.bottom(), cell.right(), cell.bottom());
 
     const int vCenter = Qt::AlignVCenter;
-    const QRect inner = cell.adjusted(kCellPadX, 0, -10, 0);
+
+    // 窄列（方向/客户端/FC）用更小的内边距：统一 12px 会把 "03" 这种两字符挤成半个
+    const auto column = index.column();
+    const bool narrow = column == FrameTableModel::DirectionColumn
+        || column == FrameTableModel::ClientColumn
+        || column == FrameTableModel::FunctionColumn;
+    const int padLeft = narrow ? 9 : kCellPadX;
+    const int padRight = narrow ? 4 : 10;
+    const QRect inner = cell.adjusted(padLeft, 0, -padRight, 0);
 
     switch (index.column()) {
     case FrameTableModel::TimeColumn: {

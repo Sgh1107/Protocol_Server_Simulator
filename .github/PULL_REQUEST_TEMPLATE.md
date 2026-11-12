@@ -16,6 +16,7 @@
 - [ ] `bash tools/check.sh` 全绿（配置校验 + 编译 WERROR + ctest + selftest）
 - [ ] 新增/修改的行为有对应的测试，或说明了为什么不测
 - [ ] 没有把 `build/`、`dist/`、调试产物带进提交（`git status` 扫过一眼）
+- [ ] **没有漏提交**：`git status --short` 里剩下的 `??` 逐个确认过（按路径分批 `git add` 时最容易漏新文件）
 - [ ] 动了验收口径 / 接口契约 / 依赖清单的，同步更新了 `docs/` 与 `THIRD_PARTY_NOTICES.md`
 
 ## 与验收项的关系

@@ -4,6 +4,7 @@
 #include "protosim/ui/commandbar.h"
 #include "protosim/ui/delegates.h"
 #include "protosim/ui/framemodel.h"
+#include "protosim/ui/proportionalheaderview.h"
 #include "protosim/ui/signalrail.h"
 #include "protosim/ui/signalmodel.h"
 #include "protosim/ui/statusstrip.h"
@@ -19,6 +20,8 @@
 #include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickWidget>
+#include <QSettings>
+#include <QTimer>
 #include <QSplitter>
 #include <QTabWidget>
 #include <QTableView>
@@ -90,6 +93,20 @@ MainWindow::MainWindow(const Context &context, ThemeBridge *theme, QWidget *pare
         connect(m_context.log, &TelemetryLog::recordAppended, this,
                 [this](const FrameRecord &) { refreshStatus(); });
     }
+
+    restoreTableLayout();
+    {
+        // 无论是否恢复过，都要按当前窗口铺满一次：
+        // 恢复的只是各列的相对比例，绝对宽度必须重新分配到可视宽度上。
+        QTimer::singleShot(0, this, [this] {
+            if (auto *header = qobject_cast<ProportionalHeaderView *>(
+                    m_signalTable->horizontalHeader()))
+                header->fitToWidth();
+            if (auto *header = qobject_cast<ProportionalHeaderView *>(
+                    m_frameTable->horizontalHeader()))
+                header->fitToWidth();
+        });
+    }
 }
 
 MainWindow::~MainWindow() = default;
@@ -137,7 +154,7 @@ void MainWindow::buildUi()
 
     auto *right = new QWidget(splitter);
     auto *rightLayout = new QVBoxLayout(right);
-    rightLayout->setContentsMargins(14, 12, 14, 0);
+    rightLayout->setContentsMargins(12, 12, 12, 0);
     rightLayout->setSpacing(12);
     rightLayout->addWidget(buildSignalPanel(), 2);
     rightLayout->addWidget(buildBottomPanel(), 3);
@@ -168,6 +185,8 @@ QWidget *MainWindow::buildSignalPanel()
 
     m_signalTable = new QTableView(card);
     m_signalTable->setObjectName(QStringLiteral("signalTable"));
+    // 自定义表头：每一列都能拖（Qt 的 Stretch / ResizeToContents 会锁死拖动）
+    m_signalTable->setHorizontalHeader(new ProportionalHeaderView(Qt::Horizontal, m_signalTable));
     m_signalTable->setModel(m_signalModel);
     m_signalTable->setItemDelegate(new SignalTableDelegate(m_signalTable));
     m_signalTable->setShowGrid(false);
@@ -185,14 +204,23 @@ QWidget *MainWindow::buildSignalPanel()
     header->setFixedHeight(34);
     header->setHighlightSections(false);
     header->setSectionsClickable(false);
-    header->setSectionResizeMode(QHeaderView::Fixed);
-    header->setSectionResizeMode(SignalTableModel::ValueColumn, QHeaderView::Stretch);
-    m_signalTable->setColumnWidth(SignalTableModel::NameColumn, 132);
-    m_signalTable->setColumnWidth(SignalTableModel::IdColumn, 160);
-    m_signalTable->setColumnWidth(SignalTableModel::TypeColumn, 96);
-    m_signalTable->setColumnWidth(SignalTableModel::QualityColumn, 104);
-    m_signalTable->setColumnWidth(SignalTableModel::TimestampColumn, 114);
-    m_signalTable->setColumnWidth(SignalTableModel::ForceColumn, 82);
+
+    if (auto *sizedHeader = qobject_cast<ProportionalHeaderView *>(
+            m_signalTable->horizontalHeader())) {
+        sizedHeader->setColumnBounds(SignalTableModel::NameColumn, 90, 200);
+        sizedHeader->setColumnBounds(SignalTableModel::IdColumn, 100, 240);
+        sizedHeader->setColumnBounds(SignalTableModel::TypeColumn, 70, 120);
+        sizedHeader->setColumnBounds(SignalTableModel::ValueColumn, 110, 420);
+        sizedHeader->setColumnBounds(SignalTableModel::QualityColumn, 80, 130);
+        sizedHeader->setColumnBounds(SignalTableModel::TimestampColumn, 90, 150);
+        sizedHeader->setColumnBounds(SignalTableModel::ForceColumn, 60, 100);
+    }
+    m_signalTable->setColumnWidth(SignalTableModel::NameColumn, 120);
+    m_signalTable->setColumnWidth(SignalTableModel::IdColumn, 140);
+    m_signalTable->setColumnWidth(SignalTableModel::TypeColumn, 88);
+    m_signalTable->setColumnWidth(SignalTableModel::QualityColumn, 96);
+    m_signalTable->setColumnWidth(SignalTableModel::TimestampColumn, 104);
+    m_signalTable->setColumnWidth(SignalTableModel::ForceColumn, 76);
 
     connect(m_signalTable->selectionModel(), &QItemSelectionModel::selectionChanged, this,
             [this](const QItemSelection &, const QItemSelection &) {
@@ -225,11 +253,13 @@ QWidget *MainWindow::buildBottomPanel()
     // 报文页
     m_frameTable = new QTableView(m_tabs);
     m_frameTable->setObjectName(QStringLiteral("frameTable"));
+    m_frameTable->setHorizontalHeader(new ProportionalHeaderView(Qt::Horizontal, m_frameTable));
     m_frameTable->setModel(m_frameModel);
     m_frameTable->setItemDelegate(new FrameTableDelegate(m_frameTable));
     m_frameTable->setShowGrid(false);
     m_frameTable->setMouseTracking(true);
     m_frameTable->setSelectionMode(QAbstractItemView::NoSelection);
+    m_frameTable->setFocusPolicy(Qt::NoFocus); // 只读观测窗，别画当前项高亮
     m_frameTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_frameTable->setFrameShape(QFrame::NoFrame);
     m_frameTable->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
@@ -241,14 +271,24 @@ QWidget *MainWindow::buildBottomPanel()
     frameHeader->setFixedHeight(30);
     frameHeader->setHighlightSections(false);
     frameHeader->setSectionsClickable(false);
-    frameHeader->setSectionResizeMode(QHeaderView::Fixed);
-    frameHeader->setSectionResizeMode(FrameTableModel::HexColumn, QHeaderView::Stretch);
-    m_frameTable->setColumnWidth(FrameTableModel::TimeColumn, 96);
-    m_frameTable->setColumnWidth(FrameTableModel::DirectionColumn, 56);
-    m_frameTable->setColumnWidth(FrameTableModel::ClientColumn, 130);
-    m_frameTable->setColumnWidth(FrameTableModel::FunctionColumn, 40);
-    m_frameTable->setColumnWidth(FrameTableModel::SummaryColumn, 190);
-    m_frameTable->setColumnWidth(FrameTableModel::ElapsedColumn, 70);
+
+    if (auto *sizedHeader = qobject_cast<ProportionalHeaderView *>(
+            m_frameTable->horizontalHeader())) {
+        sizedHeader->setColumnBounds(FrameTableModel::TimeColumn, 76, 120);
+        sizedHeader->setColumnBounds(FrameTableModel::DirectionColumn, 44, 80);
+        sizedHeader->setColumnBounds(FrameTableModel::ClientColumn, 96, 200);
+        sizedHeader->setColumnBounds(FrameTableModel::FunctionColumn, 28, 60);
+        sizedHeader->setColumnBounds(FrameTableModel::HexColumn, 200, 900);
+        sizedHeader->setColumnBounds(FrameTableModel::SummaryColumn, 90, 320);
+        sizedHeader->setColumnBounds(FrameTableModel::ElapsedColumn, 56, 96);
+    }
+    m_frameTable->setColumnWidth(FrameTableModel::TimeColumn, 84);
+    m_frameTable->setColumnWidth(FrameTableModel::DirectionColumn, 50);
+    m_frameTable->setColumnWidth(FrameTableModel::ClientColumn, 110);
+    m_frameTable->setColumnWidth(FrameTableModel::FunctionColumn, 36);
+    m_frameTable->setColumnWidth(FrameTableModel::SummaryColumn, 112);
+    m_frameTable->setColumnWidth(FrameTableModel::HexColumn, 320);
+    m_frameTable->setColumnWidth(FrameTableModel::ElapsedColumn, 64);
 
     m_tabs->addTab(m_frameTable, QStringLiteral("报文"));
 
@@ -347,6 +387,48 @@ void MainWindow::showCurveTab()
 {
     if (m_tabs != nullptr)
         m_tabs->setCurrentIndex(1);
+}
+
+bool MainWindow::restoreTableLayout()
+{
+    bool restored = false;
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ui/layout-v2/columns"));
+    if (settings.contains(QStringLiteral("signal")))
+        m_signalTable->horizontalHeader()->restoreState(
+            settings.value(QStringLiteral("signal")).toByteArray());
+    if (settings.contains(QStringLiteral("frames")))
+        m_frameTable->horizontalHeader()->restoreState(
+            settings.value(QStringLiteral("frames")).toByteArray());
+    settings.endGroup();
+
+    settings.beginGroup(QStringLiteral("ui/layout-v2/window"));
+    if (settings.contains(QStringLiteral("geometry"))) {
+        restoreGeometry(settings.value(QStringLiteral("geometry")).toByteArray());
+        restored = true;
+    }
+    settings.endGroup();
+
+    return restored;
+}
+
+void MainWindow::saveTableLayout() const
+{
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ui/layout-v2/columns"));
+    settings.setValue(QStringLiteral("signal"), m_signalTable->horizontalHeader()->saveState());
+    settings.setValue(QStringLiteral("frames"), m_frameTable->horizontalHeader()->saveState());
+    settings.endGroup();
+
+    settings.beginGroup(QStringLiteral("ui/layout-v2/window"));
+    settings.setValue(QStringLiteral("geometry"), saveGeometry());
+    settings.endGroup();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    saveTableLayout();
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindow::applyTokens()

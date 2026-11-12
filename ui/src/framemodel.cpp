@@ -39,11 +39,27 @@ QVariantList buildSegments(const FrameRecord &record)
         segments.append(QStringList{groupHex(bytes.mid(7, 2)), QStringLiteral("err")});
         if (bytes.size() > 9)
             segments.append(QStringList{groupHex(bytes.mid(9)), QStringLiteral("data")});
-    } else {
-        segments.append(QStringList{groupHex(bytes.mid(7, 1)), QStringLiteral("fc")});
-        if (bytes.size() > 8)
-            segments.append(QStringList{groupHex(bytes.mid(8)), QStringLiteral("data")});
+        return segments;
     }
+
+    segments.append(QStringList{groupHex(bytes.mid(7, 1)), QStringLiteral("fc")});
+
+    QByteArray payload = bytes.mid(8);
+    if (payload.isEmpty())
+        return segments;
+
+    // 读类响应（发出方向、FC01~04）的第一个数据字节是"字节数"，
+    // 把它单独成段，后面的寄存器才是两两一组——否则 08 会和第一个数据字节拼在一起。
+    const quint8 fc = record.functionCode;
+    const bool readResponse = record.direction == FrameDirection::Outbound
+        && (fc == 0x01 || fc == 0x02 || fc == 0x03 || fc == 0x04);
+    if (readResponse && payload.size() > 1) {
+        segments.append(QStringList{groupHex(payload.left(1)), QStringLiteral("unit")});
+        payload = payload.mid(1);
+    }
+
+    if (!payload.isEmpty())
+        segments.append(QStringList{groupHex(payload), QStringLiteral("data")});
 
     return segments;
 }

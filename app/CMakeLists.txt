@@ -6,6 +6,7 @@ add_executable(ProtoSim
     main.cpp
     selftest.cpp
     selftest.h
+    app.rc
 )
 
 target_link_libraries(ProtoSim

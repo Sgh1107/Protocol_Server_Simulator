@@ -7,12 +7,24 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QIcon>
 #include <QPainter>
 #include <QStyle>
 #include <QPushButton>
 
 namespace protosim::ui {
 namespace {
+
+/// 图标按主题取：qrc 里是 20px + 40px(@2x) 两档，QIcon 自己挑。
+QIcon iconFor(const QString &name, bool dark)
+{
+    QIcon icon;
+    const QString base = dark ? QStringLiteral(":/resources/icons/dark/")
+                              : QStringLiteral(":/resources/icons/light/");
+    icon.addFile(base + name + QStringLiteral(".png"), QSize(20, 20));
+    icon.addFile(base + name + QStringLiteral("@2x.png"), QSize(40, 40));
+    return icon;
+}
 
 /// 品牌标记：一个圆角方块 + 两条横线，纯手绘，不依赖图标资源。
 class BrandMark : public QWidget
@@ -141,20 +153,28 @@ CommandBar::CommandBar(QWidget *parent)
     chipLayout->addWidget(m_chipAddr);
     layout->addWidget(chip);
 
-    auto *exportButton = new QPushButton(QStringLiteral("导出报文"), this);
-    exportButton->setObjectName(QStringLiteral("ghostButton"));
-    exportButton->setCursor(Qt::PointingHandCursor);
-    layout->addWidget(exportButton);
+    m_exportButton = new QPushButton(QStringLiteral("导出报文"), this);
+    m_exportButton->setObjectName(QStringLiteral("ghostButton"));
+    layout->addWidget(m_exportButton);
 
     m_themeButton = new QPushButton(QStringLiteral("浅色"), this);
     m_themeButton->setObjectName(QStringLiteral("ghostButton"));
-    m_themeButton->setCursor(Qt::PointingHandCursor);
     layout->addWidget(m_themeButton);
+
+    for (QPushButton *button : {m_runButton, m_pauseButton, m_stepButton}) {
+        button->setIconSize(QSize(16, 16));
+        button->setCursor(Qt::PointingHandCursor);
+    }
+    for (QPushButton *button : {m_exportButton, m_themeButton}) {
+        button->setIconSize(QSize(15, 15));
+        button->setCursor(Qt::PointingHandCursor);
+    }
+    applyIcons(true);
 
     connect(m_runButton, &QPushButton::clicked, this, &CommandBar::runRequested);
     connect(m_pauseButton, &QPushButton::clicked, this, &CommandBar::pauseRequested);
     connect(m_stepButton, &QPushButton::clicked, this, &CommandBar::stepRequested);
-    connect(exportButton, &QPushButton::clicked, this, &CommandBar::exportRequested);
+    connect(m_exportButton, &QPushButton::clicked, this, &CommandBar::exportRequested);
     connect(m_themeButton, &QPushButton::clicked, this, &CommandBar::themeToggleRequested);
 
     connect(m_speedBox, &QComboBox::currentIndexChanged, this, [this](int index) {
@@ -198,6 +218,16 @@ void CommandBar::setEndpoint(const QString &protocol, const QString &address, in
 void CommandBar::setDarkTheme(bool dark)
 {
     m_themeButton->setText(dark ? QStringLiteral("浅色") : QStringLiteral("深色"));
+    applyIcons(dark);
+}
+
+void CommandBar::applyIcons(bool dark)
+{
+    m_runButton->setIcon(iconFor(QStringLiteral("play"), dark));
+    m_pauseButton->setIcon(iconFor(QStringLiteral("pause"), dark));
+    m_stepButton->setIcon(iconFor(QStringLiteral("step"), dark));
+    m_exportButton->setIcon(iconFor(QStringLiteral("export"), dark));
+    m_themeButton->setIcon(iconFor(QStringLiteral("theme"), dark));
 }
 
 void CommandBar::setScenarioName(const QString &name)

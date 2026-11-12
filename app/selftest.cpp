@@ -91,15 +91,32 @@ QString presetPath()
     return QString();
 }
 
-/// 走系统分配一个空闲端口，避免自检和用户正在跑的 1502 抢端口。
-quint16 freePort()
+/// 在固定区间里找一对空闲端口：对外端口 + 它的内部回环口（port+1000）。
+///
+/// 为什么不用系统临时分配：Windows 的临时端口在 49152~65535，
+/// 经常落在 64536 以上，`port+1000` 会溢出成非法端口，内部口必然绑不上。
+/// 固定区间既能避开这个坑，也方便出问题时按端口号定位。
+bool portPairFree(quint16 port)
 {
     QTcpServer probe;
-    if (!probe.listen(QHostAddress::LocalHost, 0))
-        return 0;
-    const quint16 port = probe.serverPort();
+    if (!probe.listen(QHostAddress::LocalHost, port))
+        return false;
     probe.close();
-    return port;
+
+    QTcpServer internal;
+    if (!internal.listen(QHostAddress::LocalHost, static_cast<quint16>(port + 1000)))
+        return false;
+    internal.close();
+    return true;
+}
+
+quint16 freePort()
+{
+    for (quint16 port = 21000; port < 21200; ++port) {
+        if (portPairFree(port))
+            return port;
+    }
+    return 0;
 }
 
 bool pump(const std::function<bool()> &predicate, int timeoutMs)

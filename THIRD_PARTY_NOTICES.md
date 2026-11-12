@@ -39,6 +39,8 @@
 | Ninja | 不锁 | Apache-2.0 | 生成器（CI 使用；本机可用 VS 生成器） |
 | clang-format | 不锁 | Apache-2.0 with LLVM exceptions | 代码风格 |
 | Python 3 + `jsonschema` | 不锁 | PSF / MIT | `tools/validate_config.py`、`tools/package.py` |
+| Python `pillow` | ≥10 | MIT-CMU | `tools/make_icons.py`：合成 ICO、切片 PNG |
+| Chrome / Edge（无头） | 本机已装版本 | 各自专有（仅本地调用，不分发） | `tools/make_icons.py` 用它把 SVG 渲成 PNG；换机器需要装其中之一 |
 | GitHub Actions `windows-2022` | — | — | CI（仅 Windows；P0 不设 Linux 作业） |
 
 ## 4. P0 明确**未**引入的依赖
