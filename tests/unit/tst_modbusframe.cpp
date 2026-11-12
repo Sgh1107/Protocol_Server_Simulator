@@ -155,10 +155,10 @@ private Q_SLOTS:
     void describesRequests()
     {
         const Adu read = parseAdu(adu(1, 1, pduReadHolding(0, 2)));
-        const QString readText = describe(read, {QStringLiteral("temperature")});
-        QVERIFY2(readText.contains(QStringLiteral("FC03")), qPrintable(readText));
+        const QString readText = describe(read);
+        // 解析列是"仪器短语"：不重复 FC 列已有的功能码，只留区名+范围+点数
+        QVERIFY2(readText.contains(QStringLiteral("HR[0..1]")), qPrintable(readText));
         QVERIFY2(readText.contains(QStringLiteral("读")), qPrintable(readText));
-        QVERIFY2(readText.contains(QStringLiteral("temperature")), qPrintable(readText));
 
         QByteArray coilPdu;
         coilPdu.append(char(kWriteSingleCoil));
@@ -167,7 +167,7 @@ private Q_SLOTS:
         coilPdu.append(pduByte(0xFF));
         coilPdu.append(char(0));
         const QString coilText = describe(parseAdu(adu(2, 1, coilPdu)));
-        QVERIFY2(coilText.contains(QStringLiteral("FC05")), qPrintable(coilText));
+        QVERIFY2(coilText.contains(QStringLiteral("CO[5]")), qPrintable(coilText));
         QVERIFY2(coilText.contains(QStringLiteral("ON")), qPrintable(coilText));
     }
 
@@ -178,7 +178,7 @@ private Q_SLOTS:
         pdu.append(char(kIllegalFunction));
         const QString text = describe(parseAdu(adu(1, 1, pdu)));
         QVERIFY2(text.contains(QStringLiteral("0x01")), qPrintable(text));
-        QVERIFY2(text.contains(QStringLiteral("Illegal Function")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("非法功能码")), qPrintable(text));
     }
 
     void areaNamesFollowPlcConvention()

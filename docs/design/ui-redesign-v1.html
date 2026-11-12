@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ProtoSim · 界面改版设计稿 v1</title>
+<style>
+  /* ============ 设计稿画板（不是应用本身） ============ */
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  :root{
+    --page:#f2f3f5; --page-line:#e2e5ea; --ink:#12151a; --ink-dim:#5d6675;
+    --ui: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+  }
+  html,body{margin:0;background:var(--page);color:var(--ink);font-family:var(--ui);}
+  .board{max-width:1360px;margin:0 auto;padding:40px 32px 72px;}
+
+  .board-head h1{font-size:22px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px;}
+  .board-head .sub{color:var(--ink-dim);font-size:13px;line-height:1.7;margin:0 0 24px;max-width:760px;}
+  .notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 28px;margin:0 0 28px;padding:0;list-style:none;}
+  .notes li{font-size:12.5px;line-height:1.65;color:#2b323d;padding-left:16px;position:relative;}
+  .notes li::before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;border-radius:1px;background:#4d8ff0;}
+  .notes b{font-weight:650;color:#0d1015;}
+
+  .frame-label{display:flex;align-items:baseline;gap:10px;margin:34px 0 10px;}
+  .frame-label span:first-child{font-size:13px;font-weight:650;}
+  .frame-label em{font-style:normal;font-size:12px;color:var(--ink-dim);}
+  .stage{width:1280px;max-width:100%;overflow-x:auto;}
+
+  /* ============ 应用主题令牌 ============ */
+  .app{
+    width:1280px;height:820px;display:flex;flex-direction:column;overflow:hidden;
+    font-family:var(--ui);font-size:13px;line-height:1.45;
+    border:1px solid var(--line);border-radius:8px;
+    box-shadow:0 18px 40px -18px rgba(16,20,28,.28), 0 2px 6px rgba(16,20,28,.06);
+  }
+  .app--dark{
+    --bg:#0f1114; --panel:#15181c; --panel-2:#191d22; --elev:#1e2329;
+    --line:#262b32; --line-soft:#1d2127;
+    --text:#e9ecf1; --dim:#8a94a3; --mute:#5c6675;
+    --accent:#4d8ff0; --accent-dim:rgba(77,143,240,.16);
+    --good:#57b98a; --warn:#d8a548; --bad:#e2595c;
+    --grid:#232830; --well:#0b0d10; --hover:#1b2027;
+    --shadow:0 1px 0 rgba(255,255,255,.02) inset;
+  }
+  .app--light{
+    --bg:#eef1f5; --panel:#ffffff; --panel-2:#f7f9fc; --elev:#ffffff;
+    --line:#dde3ec; --line-soft:#eaeff6;
+    --text:#0f1620; --dim:#66738a; --mute:#9aa5b6;
+    --accent:#1668e3; --accent-dim:rgba(22,104,227,.09);
+    --good:#0f9c6c; --warn:#a9701a; --bad:#d33f3f;
+    --grid:#e6ebf2; --well:#f7f9fc; --hover:#f2f6fb;
+    --shadow:none;
+  }
+  .app{background:var(--bg);color:var(--text);}
+
+  /* ============ 顶部命令栏 ============ */
+  .cmdbar{
+    height:56px;flex:0 0 56px;display:flex;align-items:center;gap:14px;padding:0 16px;
+    background:var(--panel);border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:center;gap:9px;min-width:230px;}
+  .mark{width:16px;height:16px;border-radius:3px;background:var(--accent);position:relative;flex:0 0 auto;}
+  .mark::after{content:"";position:absolute;inset:4px 4px auto 4px;height:2px;background:var(--bg);opacity:.85;}
+  .mark::before{content:"";position:absolute;inset:auto 4px 4px 4px;height:2px;background:var(--bg);opacity:.45;}
+  .brand-name{font-size:14px;font-weight:650;letter-spacing:-.01em;}
+  .brand-sub{font-size:12px;color:var(--dim);padding-left:9px;border-left:1px solid var(--line);}
+
+  .seg{display:flex;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px;gap:2px;}
+  .seg button{
+    appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12.5px;
+    padding:5px 14px;border-radius:4px;cursor:pointer;transition:background .12s,color .12s;
+  }
+  .seg button:hover{color:var(--text);}
+  .seg button[aria-pressed="true"]{background:var(--elev);color:var(--text);box-shadow:var(--shadow);font-weight:600;}
+  .seg button[aria-pressed="true"].is-run{color:var(--good);}
+
+  .field{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);}
+  .field select{
+    appearance:none;background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+    border-radius:5px;padding:5px 24px 5px 9px;font:inherit;font-size:12px;cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+    background-position:calc(100% - 13px) 11px, calc(100% - 9px) 11px;
+    background-size:4px 4px;background-repeat:no-repeat;
+  }
+  .spacer{flex:1;}
+
+  .chip{
+    display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:5px;
+    background:var(--panel-2);border:1px solid var(--line);font-size:12px;color:var(--dim);
+  }
+  .chip .proto{color:var(--text);font-weight:600;}
+  .chip .mono{font-size:11.5px;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--mute);flex:0 0 auto;}
+  .dot--live{background:var(--good);box-shadow:0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent);}
+
+  .ibtn{
+    appearance:none;height:28px;padding:0 11px;border-radius:5px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--dim);font:inherit;font-size:12px;cursor:pointer;
+  }
+  .ibtn:hover{color:var(--text);border-color:var(--mute);}
+
+  /* ============ 主体三栏 ============ */
+  .body{flex:1;display:flex;min-height:0;}
+
+  .rail{
+    width:272px;flex:0 0 272px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .rail-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 14px 10px;
+  }
+  .micro{
+    font-size:10.5px;font-weight:650;letter-spacing:.1em;color:var(--mute);
+  }
+  .count{font-size:11px;color:var(--dim);font-family:var(--mono);}
+
+  .device{margin:0 10px 10px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel-2);}
+  .device-row{display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line-soft);}
+  .caret{color:var(--mute);font-size:9px;}
+  .device-name{font-weight:600;font-size:12.5px;flex:1;}
+  .tag{
+    font-size:10px;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);
+    border-radius:3px;padding:1px 5px;background:var(--panel);
+  }
+  .device-meta{padding:6px 10px 8px;font-size:11px;color:var(--mute);font-family:var(--mono);border-bottom:1px solid var(--line-soft);}
+  .signal-list{list-style:none;margin:0;padding:4px;}
+  .signal{
+    display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:4px;cursor:pointer;
+    font-size:12.5px;color:var(--dim);position:relative;
+  }
+  .signal:hover{background:var(--hover);color:var(--text);}
+  .signal[aria-selected="true"]{background:var(--accent-dim);color:var(--text);font-weight:600;}
+  .signal[aria-selected="true"]::before{
+    content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;border-radius:2px;background:var(--accent);
+  }
+  .signal .sig-name{flex:1;}
+  .addr{
+    font-family:var(--mono);font-size:10.5px;color:var(--dim);
+    background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:1px 5px;
+  }
+  .rail-foot{margin-top:auto;padding:10px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--mute);}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;padding:12px 14px 0;gap:12px;}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+  .panel-head{
+    height:38px;flex:0 0 38px;display:flex;align-items:center;gap:10px;
+    padding:0 14px;border-bottom:1px solid var(--line);
+  }
+  .panel-head h2{margin:0;font-size:12.5px;font-weight:650;letter-spacing:.02em;}
+  .panel-head .hint{font-size:11px;color:var(--mute);}
+  .panel-head .right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+
+  /* ============ 点表 ============ */
+  .grid-wrap{flex:1;min-height:0;overflow:auto;}
+  table.grid{width:100%;border-collapse:collapse;table-layout:fixed;}
+  table.grid th{
+    position:sticky;top:0;z-index:1;background:var(--panel);
+    text-align:left;font-size:10.5px;font-weight:650;letter-spacing:.09em;color:var(--mute);
+    padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  table.grid th.num,table.grid td.num{text-align:right;}
+  table.grid td{
+    padding:0 12px;height:50px;border-bottom:1px solid var(--line-soft);vertical-align:middle;
+  }
+  table.grid tbody tr:hover{background:var(--hover);}
+  table.grid tbody tr[aria-selected="true"]{background:var(--accent-dim);}
+  table.grid tbody tr[aria-selected="true"] td:first-child{box-shadow:inset 2px 0 0 var(--accent);}
+  .c-name{font-weight:600;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  .dim{color:var(--dim);}
+  .mute{color:var(--mute);}
+
+  .c-value{text-align:right;position:relative;}
+  .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;font-weight:600;letter-spacing:-.02em;}
+  .unit{font-size:11px;color:var(--mute);margin-left:5px;font-family:var(--ui);}
+  /* 量程条：一眼看出值落在量程的哪个位置 */
+  .range{
+    position:absolute;left:12px;right:12px;bottom:9px;height:3px;border-radius:2px;
+    background:var(--line);
+  }
+  .range b{
+    position:absolute;left:0;top:0;bottom:0;width:var(--p);border-radius:2px;
+    background:color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .range::before,.range::after{
+    content:"";position:absolute;top:-2px;width:1px;height:7px;background:var(--mute);opacity:.45;
+  }
+  .range::before{left:0;}
+  .range::after{right:0;}
+  .range i{
+    position:absolute;top:50%;left:var(--p);width:7px;height:7px;border-radius:50%;
+    background:var(--accent);transform:translate(-50%,-50%);
+    box-shadow:0 0 0 2.5px color-mix(in srgb, var(--bg) 70%, transparent);
+  }
+
+  .q{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;padding:2px 8px 2px 7px;border-radius:999px;border:1px solid;}
+  .q i{width:5px;height:5px;border-radius:50%;}
+  .q-good{color:var(--good);border-color:color-mix(in srgb,var(--good) 34%,transparent);background:color-mix(in srgb,var(--good) 12%,transparent);}
+  .q-good i{background:var(--good);}
+  .q-oor{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 34%,transparent);background:color-mix(in srgb,var(--warn) 12%,transparent);}
+  .q-oor i{background:var(--warn);}
+  .q-bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 34%,transparent);background:color-mix(in srgb,var(--bad) 12%,transparent);}
+  .q-bad i{background:var(--bad);}
+
+  .force-btn{
+    appearance:none;border:1px dashed var(--line);background:transparent;color:var(--mute);
+    font:inherit;font-size:11px;padding:2px 7px;border-radius:4px;cursor:pointer;
+  }
+  .force-btn:hover{color:var(--text);border-color:var(--mute);}
+  .force-btn.is-on{color:var(--warn);border-style:solid;border-color:color-mix(in srgb,var(--warn) 45%,transparent);}
+
+  /* ============ 底部：报文 / 曲线 ============ */
+  .bottom{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:6px 6px 0 0;border-bottom:0;overflow:hidden;}
+  .tabs{height:38px;flex:0 0 38px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);}
+  .tab{
+    appearance:none;border:0;background:transparent;color:var(--dim);font:inherit;font-size:12.5px;
+    padding:0 10px;height:37px;cursor:pointer;position:relative;
+  }
+  .tab:hover{color:var(--text);}
+  .tab[aria-selected="true"]{color:var(--text);font-weight:600;}
+  .tab[aria-selected="true"]::after{content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
+  .tabs .right{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--mute);}
+
+  /* 报文日志 */
+  .log{flex:1;min-height:0;overflow:auto;background:var(--well);}
+  .log-row{
+    display:grid;grid-template-columns:96px 54px 122px 38px minmax(320px,1.45fr) minmax(180px,0.9fr) 68px;
+    align-items:center;gap:10px;padding:0 14px;height:34px;
+    border-bottom:1px solid var(--line-soft);font-size:12px;position:relative;
+  }
+  .log-head{
+    position:sticky;top:0;z-index:1;background:var(--well);height:30px;
+    font-size:10.5px;font-weight:650;letter-spacing:.09em;color:var(--mute);
+    border-bottom:1px solid var(--line);
+  }
+  .log-row:hover{background:var(--hover);}
+  .log-row.is-err{background:color-mix(in srgb,var(--bad) 8%,transparent);}
+  .log-row.is-err::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--bad);}
+  .dir{font-size:11.5px;font-weight:600;}
+  .dir-in{color:var(--accent);}
+  .dir-out{color:var(--mute);}
+  .fc{font-family:var(--mono);font-size:11.5px;color:var(--text);}
+  .hex{font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hex .mbap{color:var(--mute);}
+  .hex .unit{color:var(--dim);}
+  .hex .fc-b{color:var(--accent);font-weight:600;}
+  .hex .data{color:var(--text);}
+  .hex .err-b{color:var(--bad);font-weight:600;}
+  .parse{color:var(--dim);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .parse .sig{
+    font-family:var(--mono);font-size:10.5px;color:var(--dim);
+    background:var(--panel-2);border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-left:4px;
+  }
+  .ms{text-align:right;font-family:var(--mono);font-size:11px;color:var(--mute);}
+
+  /* 曲线 */
+  .curve{flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px 0;}
+  .curve-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px;}
+  .curve-val{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.03em;line-height:1.1;}
+  .curve-val span{font-size:12px;color:var(--mute);font-family:var(--ui);margin-left:4px;}
+  .curve-meta{font-size:11px;color:var(--mute);font-family:var(--mono);}
+  .chart-wrap{flex:1;min-height:0;position:relative;}
+  svg.chart{width:100%;height:100%;display:block;}
+
+  /* ============ 状态栏 ============ */
+  .statusbar{
+    height:30px;flex:0 0 30px;display:flex;align-items:center;gap:18px;padding:0 14px;
+    background:var(--panel);border-top:1px solid var(--line);font-size:11.5px;color:var(--dim);
+  }
+  .st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+  .st b{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--text);font-weight:600;}
+  .sep{width:1px;height:12px;background:var(--line);}
+
+  /* 说明区 */
+  .foot-note{margin-top:14px;font-size:12px;color:var(--ink-dim);line-height:1.7;}
+  .foot-note code{font-family:var(--mono);font-size:11.5px;background:#e9ecf1;padding:1px 5px;border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="board">
+
+  <div class="board-head">
+    <h1>ProtoSim 界面改版 · 设计稿 v1</h1>
+    <p class="sub">
+      目标是把它从"默认 Qt 控件拼起来的样子"变成一台看着可信的工业仪器：信息密度不降反升，但靠层次和留白让人看得下去。
+      两张图是同一套结构的深浅两版，深色展示<b>报文视图</b>，浅色展示<b>曲线视图</b>——主题只换令牌，不换布局。
+    </p>
+
+    <ul class="notes">
+      <li><b>值 + 量程条</b>：工程值放大到 17px 等宽数字，下面一条 2px 量程条标出它落在量程的哪个位置，扫一眼就知道"这个温度是不是快撞上限了"。</li>
+      <li><b>质量胶囊化</b>：Good / OutOfRange / Bad 从纯文字变成带色点的小胶囊，异常值同时把数字染色，不用逐行读文字。</li>
+      <li><b>报文分色</b>：MBAP（灰）/ 单元号（暗）/ 功能码（蓝）/ 数据（白）四段分开，异常帧整行淡红底 + 左侧红条，一眼定位。</li>
+      <li><b>命令栏重组</b>：运行/暂停/单步收进分段控件（只有一个主状态），倍速、导出、主题降为次级控件，端点状态变成常驻胶囊。</li>
+      <li><b>状态栏拆成指标</b>：原来一句话念完，现在拆成"端点 / 在线 / 收发 / 报文数 / 时钟"五个读数，数字全部等宽对齐。</li>
+      <li><b>去掉表格斑马纹</b>：改用 1px 细分割线 + 悬浮高亮，密度更高但不花；选中行用左侧 2px 蓝条 + 淡蓝底，不用整行铺色。</li>
+    </ul>
+  </div>
+
+  <div class="frame-label"><span>深色（默认主题）</span><em>报文视图 · 1280 × 820</em></div>
+  <div class="stage">
+    <div class="app app--dark" id="frame-dark"></div>
+  </div>
+
+  <div class="frame-label"><span>浅色主题</span><em>曲线视图 · 同一套布局，只换配色令牌</em></div>
+  <div class="stage">
+    <div class="app app--light" id="frame-light"></div>
+  </div>
+
+  <p class="foot-note">
+    说明：这是<b>纯静态设计稿</b>，没有改动任何应用代码。确认方向后，我会按同一套令牌落成 Qt 侧的两份实现——
+    Widgets 用 QSS + <code>QStyledItemDelegate</code> 画量程条与胶囊，QML 曲线换成带坐标轴的版本；两边共用一张色表，保证深浅切换不串色。
+  </p>
+</div>
+
+<template id="appTpl">
+  <header class="cmdbar">
+    <div class="brand">
+      <span class="mark"></span>
+      <span class="brand-name">ProtoSim</span>
+      <span class="brand-sub">FieldLink 联调预设</span>
+    </div>
+
+    <div class="seg" role="group" aria-label="运行控制">
+      <button class="is-run" aria-pressed="true">运行中</button>
+      <button aria-pressed="false">暂停</button>
+      <button aria-pressed="false">单步</button>
+    </div>
+
+    <label class="field">倍速
+      <select>
+        <option>0.5×</option><option selected>1×</option><option>2×</option><option>5×</option><option>10×</option>
+      </select>
+    </label>
+
+    <div class="spacer"></div>
+
+    <span class="chip">
+      <i class="dot dot--live"></i>
+      <span class="proto">modbus</span>
+      <span class="mono">127.0.0.1:1502</span>
+    </span>
+    <button class="ibtn">导出报文</button>
+    <button class="ibtn">浅色</button>
+  </header>
+
+  <div class="body">
+    <aside class="rail">
+      <div class="rail-head">
+        <span class="micro">设备树</span>
+        <span class="count">1 台 · 3 点</span>
+      </div>
+
+      <div class="device">
+        <div class="device-row">
+          <span class="caret">▼</span>
+          <span class="device-name">虚拟温控设备</span>
+          <span class="tag">RTU</span>
+        </div>
+        <div class="device-meta">dev-01 · unit 1</div>
+        <ul class="signal-list">
+          <li class="signal" aria-selected="true"><span class="sig-name">温度</span><span class="addr">HR[0]</span></li>
+          <li class="signal"><span class="sig-name">压力</span><span class="addr">HR[2]</span></li>
+          <li class="signal"><span class="sig-name">常量</span><span class="addr">HR[3]</span></li>
+        </ul>
+      </div>
+
+      <div class="rail-foot">场景：fieldlink_preset.json · seed 20261111</div>
+    </aside>
+
+    <main class="main">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>点表</h2>
+          <span class="hint">3 个信号 · 100ms tick</span>
+          <div class="right"><span class="hint">按 (unit, 区) 绑定</span></div>
+        </div>
+        <div class="grid-wrap">
+          <table class="grid">
+            <thead>
+              <tr>
+                <th style="width:132px">名称</th>
+                <th style="width:160px">ID</th>
+                <th style="width:96px">类型</th>
+                <th style="width:150px" class="num">工程值</th>
+                <th style="width:104px">质量</th>
+                <th style="width:114px" class="num">时标</th>
+                <th style="width:82px">强制</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr aria-selected="true">
+                <td class="c-name">温度</td>
+                <td class="mono dim">temperature</td>
+                <td class="mono dim">float32</td>
+                <td class="c-value">
+                  <span class="val">34.048</span><span class="unit">°C</span>
+                  <span class="range" style="--p:82%"><b></b><i></i></span>
+                </td>
+                <td><span class="q q-good"><i></i>Good</span></td>
+                <td class="num mono dim">T+1.800s</td>
+                <td><button class="force-btn">强制</button></td>
+              </tr>
+              <tr>
+                <td class="c-name">压力</td>
+                <td class="mono dim">pressure</td>
+                <td class="mono dim">uint16</td>
+                <td class="c-value">
+                  <span class="val">496.27</span><span class="unit">kPa</span>
+                  <span class="range" style="--p:50%"><b></b><i></i></span>
+                </td>
+                <td><span class="q q-good"><i></i>Good</span></td>
+                <td class="num mono dim">T+1.800s</td>
+                <td><button class="force-btn">强制</button></td>
+              </tr>
+              <tr>
+                <td class="c-name">常量</td>
+                <td class="mono dim">magic</td>
+                <td class="mono dim">uint16</td>
+                <td class="c-value">
+                  <span class="val">42</span><span class="unit"></span>
+                  <span class="range" style="--p:0.6%"><b></b><i></i></span>
+                </td>
+                <td><span class="q q-good"><i></i>Good</span></td>
+                <td class="num mono dim">T+1.800s</td>
+                <td><button class="force-btn is-on">已强制</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="bottom">
+        <div class="tabs">
+          <button class="tab" aria-selected="true">报文</button>
+          <button class="tab" aria-selected="false">曲线</button>
+          <div class="right">
+            <span>最近 500 帧 · 完整记录可导出</span>
+          </div>
+        </div>
+        <div class="log" data-view="log">
+          <div class="log-row log-head">
+            <span>时间</span><span>方向</span><span>客户端</span><span>FC</span>
+            <span>报文（hex）</span><span>解析</span><span style="text-align:right">耗时</span>
+          </div>
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.560</span>
+            <span class="dir dir-in">→ 收</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">03</span>
+            <span class="hex"><span class="mbap">0001 0000 0006</span> <span class="unit">01</span> <span class="fc-b">03</span> <span class="data">0000 0004</span></span>
+            <span class="parse">读保持寄存器 HR[0..3]<span class="sig">temperature · pressure · magic</span></span>
+            <span class="ms">—</span>
+          </div>
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.561</span>
+            <span class="dir dir-out">← 发</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">03</span>
+            <span class="hex"><span class="mbap">0001 0000 000b</span> <span class="unit">01</span> <span class="fc-b">03</span> <span class="data">08 4208 1900 1361 1f00 2a</span></span>
+            <span class="parse">响应 8 字节</span>
+            <span class="ms">0.94 ms</span>
+          </div>
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.660</span>
+            <span class="dir dir-in">→ 收</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">10</span>
+            <span class="hex"><span class="mbap">0002 0000 000b</span> <span class="unit">01</span> <span class="fc-b">10</span> <span class="data">0000 0002 04 41bc 0000</span></span>
+            <span class="parse">写多寄存器 HR[0..1] = 23.5<span class="sig">temperature</span></span>
+            <span class="ms">—</span>
+          </div>
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.661</span>
+            <span class="dir dir-out">← 发</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">10</span>
+            <span class="hex"><span class="mbap">0002 0000 0006</span> <span class="unit">01</span> <span class="fc-b">10</span> <span class="data">0000 0002</span></span>
+            <span class="parse">响应 · 已受理，审计已记录</span>
+            <span class="ms">0.71 ms</span>
+          </div>
+
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.860</span>
+            <span class="dir dir-in">→ 收</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">01</span>
+            <span class="hex"><span class="mbap">0004 0000 0006</span> <span class="unit">01</span> <span class="fc-b">01</span> <span class="data">0000 0002</span></span>
+            <span class="parse">读线圈 CO[0..1]<span class="sig">coil-a · coil-b</span></span>
+            <span class="ms">—</span>
+          </div>
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.861</span>
+            <span class="dir dir-out">← 发</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">01</span>
+            <span class="hex"><span class="mbap">0004 0000 0004</span> <span class="unit">01</span> <span class="fc-b">01</span> <span class="data">01 02</span></span>
+            <span class="parse">响应 1 字节</span>
+            <span class="ms">0.68 ms</span>
+          </div>
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.960</span>
+            <span class="dir dir-in">→ 收</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">06</span>
+            <span class="hex"><span class="mbap">0005 0000 0006</span> <span class="unit">01</span> <span class="fc-b">06</span> <span class="data">0003 004d</span></span>
+            <span class="parse">写保持寄存器 HR[3] = 77<span class="sig">magic</span></span>
+            <span class="ms">—</span>
+          </div>
+
+          <div class="log-row">
+            <span class="mono dim">17:20:07.961</span>
+            <span class="dir dir-out">← 发</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">06</span>
+            <span class="hex"><span class="mbap">0005 0000 0006</span> <span class="unit">01</span> <span class="fc-b">06</span> <span class="data">0003 004d</span></span>
+            <span class="parse">响应 · 回读一致，forced 未置位</span>
+            <span class="ms">0.55 ms</span>
+          </div>
+          <div class="log-row is-err">
+            <span class="mono dim">17:20:07.760</span>
+            <span class="dir dir-in">→ 收</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">03</span>
+            <span class="hex"><span class="mbap">0003 0000 0006</span> <span class="unit">01</span> <span class="fc-b">03</span> <span class="data">9c40 0001</span></span>
+            <span class="parse">读保持寄存器 HR[40000] · 地址未映射</span>
+            <span class="ms">—</span>
+          </div>
+
+          <div class="log-row is-err">
+            <span class="mono dim">17:20:07.761</span>
+            <span class="dir dir-out">← 发</span>
+            <span class="mono mute">127.0.0.1:52344</span>
+            <span class="fc">83</span>
+            <span class="hex"><span class="mbap">0003 0000 0003</span> <span class="unit">01</span> <span class="err-b">83 02</span></span>
+            <span class="parse">异常响应 · 0x02 Illegal Data Address</span>
+            <span class="ms">0.63 ms</span>
+          </div>
+        </div>
+
+        <div class="curve" data-view="curve" hidden>
+          <div class="curve-head">
+            <div>
+              <div class="micro">实时曲线 · 最近 30 s</div>
+              <div class="curve-val">34.048<span>°C</span></div>
+            </div>
+            <div class="curve-meta">温度 · HR[0..1] · float32 · ABCD · 量程 15~35</div>
+          </div>
+          <div class="chart-wrap">
+            <svg class="chart" preserveAspectRatio="xMidYMid meet"
+                 data-min="15" data-max="35"
+                 data-values="25.0,26.9,29.2,31.4,33.2,34.6,35.0,34.6,33.4,31.6,29.4,27.2,25.4,24.0,23.2,23.0,23.4,24.4,26.0,28.0,30.2,32.2,33.8,34.8"></svg>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="statusbar">
+    <span class="st"><i class="dot dot--live"></i>端点 Running</span>
+    <span class="sep"></span>
+    <span class="st">在线 <b>0</b>/8</span>
+    <span class="st">收 <b>1 284</b></span>
+    <span class="st">发 <b>1 284</b></span>
+    <span class="st">异常 <b>2</b></span>
+    <span class="spacer"></span>
+    <span class="st">报文 <b>2 568</b></span>
+    <span class="sep"></span>
+    <span class="st">仿真时钟 <b>T+1.800s</b> · tick <b>18</b></span>
+  </footer>
+</template>
+
+<script>
+(function () {
+  var tpl = document.getElementById('appTpl');
+
+  // ?only=dark / ?only=light：只渲染一张，1:1 看清细节（评审/截图用）
+  var only = new URLSearchParams(location.search).get('only');
+
+  // 两个主题共用同一份结构，克隆确保"只换令牌不换布局"
+  document.querySelectorAll('.app').forEach(function (host) {
+    host.appendChild(tpl.content.cloneNode(true));
+  });
+
+  if (only) {
+    document.querySelector('.board-head').hidden = true;
+    document.querySelector('.foot-note').hidden = true;
+    document.querySelectorAll('.frame-label').forEach(function (el) { el.hidden = true; });
+    document.querySelectorAll('.stage').forEach(function (el) {
+      var app = el.querySelector('.app');
+      var want = only === 'light' ? 'app--light' : 'app--dark';
+      if (!app.classList.contains(want)) el.hidden = true;
+    });
+    document.querySelector('.board').style.padding = '0';
+    document.querySelector('.board').style.maxWidth = 'none';
+    document.querySelectorAll('.app').forEach(function (a) {
+      a.style.borderRadius = '0';
+      a.style.boxShadow = 'none';
+    });
+  }
+
+  // 深色看报文、浅色看曲线：一张画板同时展示两个视图
+  var dark = document.querySelector('#frame-dark');
+  var light = document.querySelector('#frame-light');
+  if (light) {
+    var tabs = light.querySelectorAll('.tab');
+    tabs[0].setAttribute('aria-selected', 'false');
+    tabs[1].setAttribute('aria-selected', 'true');
+    light.querySelector('[data-view="log"]').hidden = true;
+    light.querySelector('[data-view="curve"]').hidden = false;
+  }
+
+  // 曲线：根据数据画网格、坐标、折线、面积与当前点
+  document.querySelectorAll('svg.chart').forEach(function (svg) {
+    var vals = (svg.dataset.values || '').split(',').filter(Boolean).map(Number);
+    if (vals.length < 2) return;
+
+    var NS = 'http://www.w3.org/2000/svg';
+    var W = 900, H = 240, padL = 38, padR = 12, padT = 14, padB = 26;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+    // Y 轴固定到信号量程（仪器语义）：这样"离上下限还有多远"才看得出来。
+    // 若数据越出量程（OutOfRange），临时把轴撑开，避免曲线被裁掉。
+    var domMin = parseFloat(svg.dataset.min), domMax = parseFloat(svg.dataset.max);
+    var dataLo = Math.min.apply(null, vals), dataHi = Math.max.apply(null, vals);
+    var lo = isFinite(domMin) ? Math.min(domMin, dataLo) : dataLo;
+    var hi = isFinite(domMax) ? Math.max(domMax, dataHi) : dataHi;
+    if (hi - lo < 1e-6) hi = lo + 1;
+    var iw = W - padL - padR, ih = H - padT - padB;
+
+    function x(i) { return padL + iw * i / (vals.length - 1); }
+    function y(v) { return padT + ih - ih * (v - lo) / (hi - lo); }
+
+    function el(name, attrs) {
+      var node = document.createElementNS(NS, name);
+      for (var k in attrs) node.setAttribute(k, attrs[k]);
+      return node;
+    }
+
+    // 网格 + 纵轴刻度
+    for (var g = 0; g <= 4; g++) {
+      var gy = padT + ih * g / 4;
+      svg.appendChild(el('line', {
+        x1: padL, x2: W - padR, y1: gy, y2: gy,
+        stroke: 'var(--grid)', 'stroke-width': 1, 'shape-rendering': 'crispEdges'
+      }));
+      var label = el('text', {
+        x: padL - 8, y: gy + 3.5, 'text-anchor': 'end',
+        fill: 'var(--mute)', 'font-size': 10.5, 'font-family': 'var(--mono)'
+      });
+      label.textContent = (lo + (hi - lo) * (1 - g / 4)).toFixed(1);
+      svg.appendChild(label);
+    }
+
+    // 面积
+    var line = '', area = 'M ' + x(0) + ' ' + y(vals[0]);
+    for (var i = 0; i < vals.length; i++) {
+      line += (i ? ' L ' : 'M ') + x(i).toFixed(2) + ' ' + y(vals[i]).toFixed(2);
+      if (i) area += ' L ' + x(i).toFixed(2) + ' ' + y(vals[i]).toFixed(2);
+    }
+    area += ' L ' + x(vals.length - 1) + ' ' + (padT + ih) + ' L ' + x(0) + ' ' + (padT + ih) + ' Z';
+
+    var defs = el('defs', {});
+    var grad = el('linearGradient', { id: 'fill-' + Math.random().toString(36).slice(2), x1: 0, y1: 0, x2: 0, y2: 1 });
+    grad.appendChild(el('stop', { offset: '0%', 'stop-color': 'var(--accent)', 'stop-opacity': .22 }));
+    grad.appendChild(el('stop', { offset: '100%', 'stop-color': 'var(--accent)', 'stop-opacity': 0 }));
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+    svg.appendChild(el('path', { d: area, fill: 'url(#' + grad.id + ')' }));
+    svg.appendChild(el('path', {
+      d: line, fill: 'none', stroke: 'var(--accent)',
+      'stroke-width': 1.8, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+    }));
+
+    // 当前点
+    var lx = x(vals.length - 1), ly = y(vals[vals.length - 1]);
+    svg.appendChild(el('circle', { cx: lx, cy: ly, r: 7, fill: 'var(--accent)', opacity: .16 }));
+    svg.appendChild(el('circle', { cx: lx, cy: ly, r: 3, fill: 'var(--accent)' }));
+
+    // 横轴时间标签
+    ['-30s', '-20s', '-10s', '现在'].forEach(function (t, idx) {
+      var tx = padL + iw * idx / 3;
+      var node = el('text', {
+        x: tx, y: H - 8, 'text-anchor': idx === 0 ? 'start' : (idx === 3 ? 'end' : 'middle'),
+        fill: 'var(--mute)', 'font-size': 10.5, 'font-family': 'var(--mono)'
+      });
+      node.textContent = t;
+      svg.appendChild(node);
+    });
+  });
+})();
+</script>
+</body>
+</html>

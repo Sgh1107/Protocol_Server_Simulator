@@ -616,10 +616,18 @@ void ModbusTcpAdapter::onTapFrame(const QByteArray &aduBytes, const QString &cli
         m_pending.enqueue(Pending{clientId, adu.transactionId, timestampMs});
         while (m_pending.size() > 128)
             m_pending.dequeue();
-        QElapsedTimer timer;
-        timer.start();
-        m_pendingElapsed.insert(key, timer);
-        logFrame(aduBytes, adu, clientId, true, timestampMs, -1);
+
+        const modbus::AddressRange range = modbus::addressRangeOf(adu);
+        const QStringList signals = range.valid
+            ? signalsForRange(adu.functionCode, range.start, range.count)
+            : QStringList();
+
+        PendingFrame pending;
+        pending.timer.start();
+        pending.signalIds = signals;
+        m_pendingElapsed.insert(key, pending);
+
+        logFrame(aduBytes, adu, clientId, true, timestampMs, -1, signals);
         return;
     }
 
@@ -628,18 +636,20 @@ void ModbusTcpAdapter::onTapFrame(const QByteArray &aduBytes, const QString &cli
         ++m_errorFrames;
 
     qint64 elapsedUs = -1;
-    auto timerIt = m_pendingElapsed.find(key);
-    if (timerIt != m_pendingElapsed.end()) {
-        elapsedUs = timerIt.value().nsecsElapsed() / 1000;
-        m_pendingElapsed.erase(timerIt);
+    QStringList signals;
+    auto pendingIt = m_pendingElapsed.find(key);
+    if (pendingIt != m_pendingElapsed.end()) {
+        elapsedUs = pendingIt.value().timer.nsecsElapsed() / 1000;
+        signals = pendingIt.value().signalIds;
+        m_pendingElapsed.erase(pendingIt);
     }
 
-    logFrame(aduBytes, adu, clientId, false, timestampMs, elapsedUs);
+    logFrame(aduBytes, adu, clientId, false, timestampMs, elapsedUs, signals);
 }
 
 void ModbusTcpAdapter::logFrame(const QByteArray &aduBytes, const modbus::Adu &adu,
                                 const QString &clientId, bool inbound, qint64 timestampMs,
-                                qint64 elapsedUs)
+                                qint64 elapsedUs, const QStringList &signalIds)
 {
     if (m_log == nullptr)
         return;
@@ -655,11 +665,8 @@ void ModbusTcpAdapter::logFrame(const QByteArray &aduBytes, const modbus::Adu &a
     record.functionCode = adu.functionCode;
     record.error = adu.isException();
 
-    const modbus::AddressRange range = modbus::addressRangeOf(adu);
-    if (range.valid)
-        record.signalIds = signalsForRange(adu.functionCode, range.start, range.count);
-
-    record.summary = modbus::describe(adu, record.signalIds);
+    record.signalIds = signalIds;
+    record.summary = modbus::describe(adu, inbound);
     m_log->append(record);
 }
 

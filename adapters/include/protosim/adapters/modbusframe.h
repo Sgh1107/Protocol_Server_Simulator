@@ -78,8 +78,13 @@ QString exceptionName(quint8 code);
 QString registerAreaName(quint8 functionCode);
 
 /// 人类可读摘要，报文日志的「解析」列。
-/// signalIds 非空时会带上涉及的信号，便于一眼看出这条报文碰了哪些点。
-QString describe(const Adu &adu, const QStringList &signalIds = QStringList());
+///
+/// `isRequest` 必须显式给：FC03 的请求是「起始地址+数量」，响应是「字节数+数据」，
+/// 只看 PDU 前几个字节无法区分，按请求解析会把响应读成乱码范围。
+///
+/// 这里只产出「协议层人话」，不带信号名——列宽有限，多一个名字就把范围挤没了；
+/// 按信号过滤走 FrameRecord::signalIds，导出文本里也单独带一段。
+QString describe(const Adu &adu, bool isRequest = true);
 
 /// 构造异常响应 ADU（事务号原样回，功能码 OR 0x80）。
 QByteArray buildExceptionResponse(quint16 transactionId, quint8 unitId, quint8 functionCode,

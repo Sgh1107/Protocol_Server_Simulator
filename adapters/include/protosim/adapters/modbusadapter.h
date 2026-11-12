@@ -119,7 +119,8 @@ private:
     void onTapFrame(const QByteArray &aduBytes, const QString &clientId, bool inbound,
                     qint64 timestampMs);
     void logFrame(const QByteArray &aduBytes, const modbus::Adu &adu, const QString &clientId,
-                  bool inbound, qint64 timestampMs, qint64 elapsedUs);
+                  bool inbound, qint64 timestampMs, qint64 elapsedUs,
+                  const QStringList &signalIds);
     QStringList signalsForRange(quint8 functionCode, quint16 start, quint16 count) const;
 
     Cell cellAt(int unitId, QModbusDataUnit::RegisterType type, int address) const;
@@ -137,7 +138,13 @@ private:
 
     QHash<QString, Cell> m_cells;
     QQueue<Pending> m_pending;
-    QHash<QString, QElapsedTimer> m_pendingElapsed; // key = "client|txid"，用来算报文耗时
+    /// 请求发出时记下"耗时起点 + 涉及的点"，响应回来时用它算耗时、并让响应行也能按信号过滤
+    struct PendingFrame
+    {
+        QElapsedTimer timer;
+        QStringList signalIds;
+    };
+    QHash<QString, PendingFrame> m_pendingElapsed; // key = "client|txid"
     QString m_currentClientId = QStringLiteral("-");
 
     int m_unitId = 1;

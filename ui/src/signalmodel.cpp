@@ -6,49 +6,37 @@
 namespace protosim::ui {
 namespace {
 
-QString formatValue(const SignalSnapshot &snapshot)
+/// 小数位由「量程」决定而不是原始类型决定：
+/// 压力是 uint16 但 scale=0.1，工程值 483.7 如果按整型四舍五入就丢精度了。
+QString formatValue(const Signal &signal, double value)
 {
-    if (!snapshot.value.isValid())
-        return QStringLiteral("—");
+    if (signal.dataType == DataType::Bool)
+        return value != 0.0 ? QStringLiteral("1") : QStringLiteral("0");
 
-    bool ok = false;
-    const double numeric = snapshot.value.toDouble(&ok);
-    if (!ok)
-        return snapshot.value.toString();
+    if (signal.dataType == DataType::Float32 || signal.dataType == DataType::Float64)
+        return QString::number(value, 'f', 3);
 
-    if (qFuzzyCompare(numeric, qRound64(numeric) * 1.0))
-        return QString::number(static_cast<qlonglong>(qRound64(numeric)));
+    const double scale = qAbs(signal.scale);
+    if (scale >= 1.0)
+        return QString::number(qRound64(value));
 
-    return QString::number(numeric, 'f', 3);
+    int decimals = 3;
+    if (scale >= 0.1)
+        decimals = 1;
+    else if (scale >= 0.01)
+        decimals = 2;
+    return QString::number(value, 'f', decimals);
 }
 
 /// 时标可能是仿真时钟（从 0 起），也可能被接到墙上时间。
-/// 小于 1973 年一律按"仿真相对时间"显示，避免出现 08:00:01.700 这种假时间。
+/// 小于 1973 年一律按「仿真相对时间」显示，避免出现 08:00:01.700 这种假时间。
 QString formatTimestamp(qint64 timestampMs)
 {
     if (timestampMs <= 0)
         return QStringLiteral("—");
-
     if (timestampMs < 100000000000LL)
         return QStringLiteral("T+%1s").arg(timestampMs / 1000.0, 0, 'f', 3);
-
     return QDateTime::fromMSecsSinceEpoch(timestampMs).toString(QStringLiteral("HH:mm:ss.zzz"));
-}
-
-QColor qualityColor(Quality quality, const ThemeTokens &tokens)
-{
-    switch (quality) {
-    case Quality::Good:
-        return tokens.good;
-    case Quality::OutOfRange:
-    case Quality::Timeout:
-        return tokens.warning;
-    case Quality::Bad:
-        return tokens.bad;
-    case Quality::Unknown:
-        break;
-    }
-    return tokens.subtleText;
 }
 
 } // namespace
@@ -64,25 +52,14 @@ SignalTableModel::SignalTableModel(DataBank *bank, QObject *parent)
     refresh();
 }
 
-void SignalTableModel::setTokens(const ThemeTokens &tokens)
-{
-    m_tokens = tokens;
-    if (!m_ids.isEmpty()) {
-        Q_EMIT dataChanged(index(0, 0), index(m_ids.size() - 1, ColumnCount - 1),
-                          {Qt::ForegroundRole});
-    }
-}
-
 void SignalTableModel::refresh()
 {
     beginResetModel();
-
     m_ids = m_bank != nullptr ? m_bank->signalIds() : QStringList();
     m_snapshots = m_bank != nullptr ? m_bank->snapshots() : QVector<SignalSnapshot>();
     m_rowOf.clear();
     for (int i = 0; i < m_ids.size(); ++i)
         m_rowOf.insert(m_ids.at(i), i);
-
     endResetModel();
 }
 
@@ -91,18 +68,19 @@ QString SignalTableModel::signalIdAt(int row) const
     return row >= 0 && row < m_ids.size() ? m_ids.at(row) : QString();
 }
 
+int SignalTableModel::rowOf(const QString &signalId) const
+{
+    return m_rowOf.value(signalId, -1);
+}
+
 int SignalTableModel::rowCount(const QModelIndex &parent) const
 {
-    if (parent.isValid())
-        return 0;
-    return m_ids.size();
+    return parent.isValid() ? 0 : m_ids.size();
 }
 
 int SignalTableModel::columnCount(const QModelIndex &parent) const
 {
-    if (parent.isValid())
-        return 0;
-    return ColumnCount;
+    return parent.isValid() ? 0 : ColumnCount;
 }
 
 QVariant SignalTableModel::data(const QModelIndex &index, int role) const
@@ -111,26 +89,40 @@ QVariant SignalTableModel::data(const QModelIndex &index, int role) const
         return {};
 
     const SignalSnapshot &snapshot = m_snapshots.at(index.row());
-    const Signal definition =
-        m_bank != nullptr ? m_bank->definition(snapshot.signalId) : Signal();
+    const Signal definition = m_bank != nullptr ? m_bank->definition(snapshot.signalId) : Signal();
 
-    if (role == Qt::TextAlignmentRole) {
-        if (index.column() == ValueColumn || index.column() == TimestampColumn)
-            return static_cast<int>(Qt::AlignRight | Qt::AlignVCenter);
-        return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
+    bool ok = false;
+    const double numeric = snapshot.value.toDouble(&ok);
+
+    switch (role) {
+    case SignalIdRole:
+        return snapshot.signalId;
+    case ValueRole:
+        return ok ? numeric : 0.0;
+    case UnitRole:
+        return definition.unit;
+    case QualityRole:
+        return static_cast<int>(snapshot.quality);
+    case ForcedRole:
+        return snapshot.forced;
+    case RangeMinRole:
+        return definition.range.min;
+    case RangeMaxRole:
+        return definition.range.max;
+    case HasRangeRole:
+        return definition.range.valid;
+    case TimestampMsRole:
+        return snapshot.timestampMs;
+    case CategoryRole:
+        return definition.category;
+    default:
+        break;
     }
 
-    if (role == Qt::ForegroundRole) {
-        if (index.column() == QualityColumn)
-            return qualityColor(snapshot.quality, m_tokens);
-        if (index.column() == ValueColumn && snapshot.quality != Quality::Good)
-            return qualityColor(snapshot.quality, m_tokens);
-        if (index.column() == IdColumn || index.column() == TimestampColumn)
-            return m_tokens.subtleText;
-        if (index.column() == ForcedColumn && snapshot.forced)
-            return m_tokens.warning;
-        return {};
-    }
+    if (role == Qt::TextAlignmentRole)
+        return static_cast<int>(Qt::AlignVCenter | (index.column() == TimestampColumn
+                                                        ? Qt::AlignRight
+                                                        : Qt::AlignLeft));
 
     if (role != Qt::DisplayRole)
         return {};
@@ -140,30 +132,34 @@ QVariant SignalTableModel::data(const QModelIndex &index, int role) const
         return definition.name;
     case IdColumn:
         return snapshot.signalId;
-    case DeviceColumn:
-        return definition.deviceId;
     case TypeColumn:
         return dataTypeToString(definition.dataType);
     case ValueColumn:
-        return formatValue(snapshot);
-    case UnitColumn:
-        return definition.unit;
+        return ok ? formatValue(definition, numeric) : QStringLiteral("—");
     case QualityColumn:
         return qualityToString(snapshot.quality);
     case TimestampColumn:
         return formatTimestamp(snapshot.timestampMs);
-    case ForcedColumn:
-        return snapshot.forced ? QStringLiteral("强制") : QString();
+    case ForceColumn:
+        return snapshot.forced ? QStringLiteral("已强制") : QStringLiteral("强制");
     default:
         break;
     }
-
     return {};
 }
 
 QVariant SignalTableModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-    if (orientation != Qt::Horizontal || role != Qt::DisplayRole)
+    if (orientation != Qt::Horizontal)
+        return {};
+
+    if (role == Qt::TextAlignmentRole) {
+        const bool numeric = section == ValueColumn || section == TimestampColumn;
+        return static_cast<int>(numeric ? (Qt::AlignRight | Qt::AlignVCenter)
+                                        : (Qt::AlignLeft | Qt::AlignVCenter));
+    }
+
+    if (role != Qt::DisplayRole)
         return {};
 
     switch (section) {
@@ -171,19 +167,15 @@ QVariant SignalTableModel::headerData(int section, Qt::Orientation orientation, 
         return QStringLiteral("名称");
     case IdColumn:
         return QStringLiteral("ID");
-    case DeviceColumn:
-        return QStringLiteral("设备");
     case TypeColumn:
         return QStringLiteral("类型");
     case ValueColumn:
         return QStringLiteral("工程值");
-    case UnitColumn:
-        return QStringLiteral("单位");
     case QualityColumn:
         return QStringLiteral("质量");
     case TimestampColumn:
         return QStringLiteral("时标");
-    case ForcedColumn:
+    case ForceColumn:
         return QStringLiteral("强制");
     default:
         break;
@@ -195,11 +187,9 @@ void SignalTableModel::onSignalChanged(const protosim::SignalChange &change)
 {
     const int row = m_rowOf.value(change.signalId, -1);
     if (row < 0) {
-        // 新信号（热加载）后补一行
         refresh();
         return;
     }
-
     if (m_bank == nullptr)
         return;
 

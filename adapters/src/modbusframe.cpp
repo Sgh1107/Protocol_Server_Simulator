@@ -183,7 +183,46 @@ QString registerAreaName(quint8 functionCode)
     return QStringLiteral("Unknown");
 }
 
-QString describe(const Adu &adu, const QStringList &signalIds)
+namespace {
+
+/// 解析列用的短区名。FC 已经在自己的列里了，这里不再重复"FC03 读保持寄存器"。
+QString shortAreaName(quint8 functionCode)
+{
+    switch (functionCode) {
+    case kReadCoils:
+    case kWriteSingleCoil:
+    case kWriteMultipleCoils:
+        return QStringLiteral("CO");
+    case kReadDiscreteInputs:
+        return QStringLiteral("DI");
+    case kReadInputRegisters:
+        return QStringLiteral("IR");
+    default:
+        break;
+    }
+    return QStringLiteral("HR");
+}
+
+QString exceptionText(quint8 code)
+{
+    switch (code) {
+    case kIllegalFunction:
+        return QStringLiteral("非法功能码");
+    case kIllegalDataAddress:
+        return QStringLiteral("地址非法");
+    case kIllegalDataValue:
+        return QStringLiteral("数据值非法");
+    case kServerDeviceFailure:
+        return QStringLiteral("设备故障");
+    default:
+        break;
+    }
+    return QStringLiteral("未知异常");
+}
+
+} // namespace
+
+QString describe(const Adu &adu, bool isRequest)
 {
     if (!adu.valid)
         return adu.error;
@@ -194,10 +233,23 @@ QString describe(const Adu &adu, const QStringList &signalIds)
         if (adu.pdu.size() < 2)
             return QStringLiteral("异常响应（格式错误）");
         const quint8 code = static_cast<quint8>(adu.pdu.at(1));
-        return QStringLiteral("异常响应 FC%1 码 0x%2 %3")
-            .arg(adu.functionCode & 0x7F, 2, 16, QLatin1Char('0'))
-            .arg(QString::number(code, 16).toUpper().rightJustified(2, QLatin1Char('0')))
-            .arg(exceptionName(code));
+        return QStringLiteral("0x%1 %2")
+            .arg(QString::number(code, 16).toUpper().rightJustified(2, QLatin1Char('0')),
+                 exceptionText(code));
+    }
+
+    // 响应帧：只有当它是异常时才有语义，正常响应只报数据长度。
+    // 读类响应的第 2 个字节就是字节数，按它报才是"4 个字节的数据"，
+    // 而不是把计数位也算进去（那样 2 个寄存器会显示成 5 字节）。
+    if (!isRequest) {
+        int payloadBytes = qMax(0, adu.pdu.size() - 1);
+        const quint8 fc = adu.functionCode;
+        const bool isReadResponse = fc == kReadCoils || fc == kReadDiscreteInputs
+            || fc == kReadHoldingRegisters || fc == kReadInputRegisters;
+        if (isReadResponse && adu.pdu.size() >= 2)
+            payloadBytes = static_cast<quint8>(adu.pdu.at(1));
+
+        return QStringLiteral("响应 %1 字节").arg(payloadBytes);
     }
 
     const AddressRange range = addressRangeOf(adu);
@@ -211,10 +263,8 @@ QString describe(const Adu &adu, const QStringList &signalIds)
             return QStringLiteral("FC%1 报文长度不足").arg(adu.functionCode, 2, 16, QLatin1Char('0'));
 
         const quint16 last = range.count > 0 ? range.start + range.count - 1 : range.start;
-        text = QStringLiteral("FC%1 %2 读 %3[%4..%5] 共 %6 个")
-                   .arg(adu.functionCode, 2, 16, QLatin1Char('0'))
-                   .arg(functionName(adu.functionCode),
-                        registerAreaName(adu.functionCode))
+        text = QStringLiteral("读 %1[%2..%3] · %4 个")
+                   .arg(shortAreaName(adu.functionCode))
                    .arg(range.start)
                    .arg(last)
                    .arg(range.count);
@@ -224,7 +274,7 @@ QString describe(const Adu &adu, const QStringList &signalIds)
     case kWriteSingleCoil: {
         // 线圈值在 pdu[3..4]，0xFF00 = ON，0x0000 = OFF
         const bool on = adu.pdu.size() >= 5 && readUInt16(adu.pdu, 3) == 0xFF00;
-        text = QStringLiteral("FC05 写单线圈 %1 = %2")
+        text = QStringLiteral("写 CO[%1] = %2")
                    .arg(range.start)
                    .arg(on ? QStringLiteral("ON") : QStringLiteral("OFF"));
         break;
@@ -232,32 +282,30 @@ QString describe(const Adu &adu, const QStringList &signalIds)
 
     case kWriteSingleRegister: {
         const quint16 value = adu.pdu.size() >= 5 ? readUInt16(adu.pdu, 3) : 0;
-        text = QStringLiteral("FC06 写保持寄存器 %1 = %2（0x%3）")
+        text = QStringLiteral("写 %1[%2] = %3")
+                   .arg(shortAreaName(adu.functionCode))
                    .arg(range.start)
-                   .arg(value)
-                   .arg(value, 4, 16, QLatin1Char('0'));
+                   .arg(value);
         break;
     }
 
     case kWriteMultipleCoils:
     case kWriteMultipleRegisters: {
-        text = QStringLiteral("FC%1 %2 写 %3 个 @%4")
-                   .arg(adu.functionCode, 2, 16, QLatin1Char('0'))
-                   .arg(functionName(adu.functionCode))
-                   .arg(range.count)
-                   .arg(range.start);
+        const quint16 last = range.count > 0 ? range.start + range.count - 1 : range.start;
+        text = QStringLiteral("写 %1[%2..%3] · %4 个")
+                   .arg(shortAreaName(adu.functionCode))
+                   .arg(range.start)
+                   .arg(last)
+                   .arg(range.count);
         break;
     }
 
     default:
-        text = QStringLiteral("FC%1 %2")
-                   .arg(adu.functionCode, 2, 16, QLatin1Char('0'))
-                   .arg(functionName(adu.functionCode));
+        text = QStringLiteral("功能码 0x%1")
+                   .arg(QString::number(adu.functionCode, 16).toUpper().rightJustified(
+                       2, QLatin1Char('0')));
         break;
     }
-
-    if (!signalIds.isEmpty())
-        text += QStringLiteral(" {%1}").arg(signalIds.join(QLatin1Char(',')));
 
     return text;
 }

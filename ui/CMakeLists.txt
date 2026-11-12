@@ -1,17 +1,26 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# UI：Widgets 主体（点表 / 设备树 / 报文）+ QML 局部（曲线）。
+# UI：Widgets 主体（命令栏 / 设备栏 / 点表 / 报文）+ QML 局部（曲线）。
 # 本模块只依赖 core 与适配器接口，不直接链接任何协议库。
+# 视觉规格见 docs/design/ui-prototype-live.html。
 
 add_library(protosim_ui STATIC
     include/protosim/ui/theme.h
     include/protosim/ui/signalmodel.h
     include/protosim/ui/framemodel.h
+    include/protosim/ui/delegates.h
+    include/protosim/ui/commandbar.h
+    include/protosim/ui/signalrail.h
+    include/protosim/ui/statusstrip.h
     include/protosim/ui/mainwindow.h
 
     src/theme.cpp
     src/signalmodel.cpp
     src/framemodel.cpp
+    src/delegates.cpp
+    src/commandbar.cpp
+    src/signalrail.cpp
+    src/statusstrip.cpp
     src/mainwindow.cpp
 
     qml.qrc

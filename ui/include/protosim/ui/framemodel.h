@@ -9,8 +9,8 @@
 
 namespace protosim::ui {
 
-/// 报文页签：逐帧落地到表格。默认只保留最近 500 帧，
-/// 全量在 TelemetryLog 里（可导出文本），UI 只负责"看着不卡"。
+/// 报文模型。窗口只保留最近 500 行（全量在 TelemetryLog 里、可导出），
+/// 同时把 hex 预先切成「MBAP / 单元号 / 功能码 / 数据」四段交给委托上色。
 class FrameTableModel : public QAbstractTableModel
 {
     Q_OBJECT
@@ -27,6 +27,16 @@ public:
         ColumnCount,
     };
 
+    enum Role {
+        SegmentsRole = Qt::UserRole + 1, // QVariantList<QStringList{text, kind}>
+        ErrorRole,
+        InboundRole,
+        ElapsedUsRole,
+        SummaryRole,
+        ClientRole,
+        TimestampMsRole,
+    };
+
     explicit FrameTableModel(TelemetryLog *log, QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -35,7 +45,6 @@ public:
     QVariant headerData(int section, Qt::Orientation orientation,
                         int role = Qt::DisplayRole) const override;
 
-    void setTokens(const ThemeTokens &tokens);
     void setFilterSignal(const QString &signalId);
     void clearView();
 
@@ -46,7 +55,6 @@ private:
     TelemetryLog *m_log;
     QVector<FrameRecord> m_rows;
     QString m_filterSignalId;
-    ThemeTokens m_tokens = darkTokens();
     int m_maxRows = 500;
 };
 

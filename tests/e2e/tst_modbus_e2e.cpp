@@ -579,7 +579,8 @@ private Q_SLOTS:
         QVERIFY2(!inbound.clientId.isEmpty(), "入向缺少客户端");
         QVERIFY2(!inbound.bytes.isEmpty(), "入向缺少原始报文");
         QVERIFY2(inbound.hexString().startsWith(QStringLiteral("00 01")), qPrintable(inbound.hexString()));
-        QVERIFY2(inbound.summary.contains(QStringLiteral("FC03")), qPrintable(inbound.summary));
+        // 解析列现在只给"区名+范围+点数"，功能码在 FC 列
+        QVERIFY2(inbound.summary.contains(QStringLiteral("HR[0..1]")), qPrintable(inbound.summary));
         QVERIFY2(inbound.signalIds.contains(QStringLiteral("temperature")),
                  qPrintable(inbound.signalIds.join(QLatin1Char(','))));
 
@@ -590,7 +591,8 @@ private Q_SLOTS:
         // 按信号过滤与文本导出
         QVERIFY(!fixture.log.recordsOf(QStringLiteral("temperature")).isEmpty());
         const QString text = fixture.log.toText();
-        QVERIFY2(text.contains(QStringLiteral("FC03")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("HR[0..1]")), qPrintable(text));
+        QVERIFY2(text.contains(QStringLiteral("响应 4 字节")), qPrintable(text));
     }
 
     void modbusWriteNotifiesOtherProtocol()
