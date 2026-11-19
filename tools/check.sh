@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# 提交前本地自检 —— 一条命令跑完 CI 会做的四件事：
+# 提交前本地自检（Git Bash 兼容入口；Windows 原生请用 tools\check.bat）—— 一条命令跑完 CI 会做的四件事：
 #   1. 配置包 JSON Schema 校验
 #   2. 以 CI 同款参数配置（-DPROTOSIM_WERROR=ON，警告当错误）
 #   3. 编译
