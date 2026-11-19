@@ -778,4 +778,20 @@ QVector<Binding> ModbusTcpAdapter::bindingsFromBundle(const ConfigBundle &bundle
     return bindings;
 }
 
+QVector<Binding> ModbusTcpAdapter::bindingsFromBundle(const ConfigBundle &bundle,
+                                                      const EndpointInfo &endpoint)
+{
+    const QVector<Binding> all = bindingsFromBundle(bundle);
+    if (endpoint.unitIds.isEmpty())
+        return all;
+
+    QVector<Binding> out;
+    for (const Binding &binding : all) {
+        const int unitId = binding.address.fields.value(QStringLiteral("unitId")).toInt();
+        if (endpoint.unitIds.contains(unitId))
+            out.append(binding);
+    }
+    return out;
+}
+
 } // namespace protosim

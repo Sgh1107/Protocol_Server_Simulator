@@ -170,6 +170,19 @@ QHeaderView::section {
 QTableView#frameTable QHeaderView::section { background: @well; }
 QHeaderView { background: @panel; border: 0; }
 
+/* ---------------- 设备管理器 ---------------- */
+#deviceDialog { background: @window; }
+#deviceHint { color: @mute; font-size: 11px; }
+QTableWidget#deviceTable {
+    background: @panel; border: 1px solid @border; outline: none;
+    gridline-color: @borderSoft; selection-background-color: @selection;
+}
+QLineEdit#deviceField {
+    background: @well; border: 1px solid @border; border-radius: 4px;
+    padding: 5px 7px; color: @text; min-width: 220px;
+}
+QLineEdit#deviceField:focus { border-color: @accent; }
+
 /* ---------------- 左栏 ---------------- */
 #railPanel { background: @panel; border-right: 1px solid @border; }
 #railCard { background: @panelAlt; border: 1px solid @border; border-radius: 6px; }

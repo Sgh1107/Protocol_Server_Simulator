@@ -2,6 +2,7 @@
 #include "protosim/ui/mainwindow.h"
 
 #include "protosim/ui/commandbar.h"
+#include "protosim/ui/devicemanagerdialog.h"
 #include "protosim/ui/delegates.h"
 #include "protosim/ui/framemodel.h"
 #include "protosim/ui/signalrail.h"
@@ -125,6 +126,7 @@ void MainWindow::buildUi()
     });
     connect(m_commandBar, &CommandBar::exportRequested, this, &MainWindow::onExportFrames);
     connect(m_commandBar, &CommandBar::themeToggleRequested, this, &MainWindow::onThemeToggle);
+    connect(m_commandBar, &CommandBar::devicesRequested, this, &MainWindow::openDeviceManager);
 
     // ---- 主体：设备栏 + 右列 ----
     auto *splitter = new QSplitter(Qt::Horizontal, central);
@@ -315,12 +317,22 @@ void MainWindow::setBundle(const ConfigBundle &bundle)
         selectSignal(first);
     }
 
-    if (m_context.adapter != nullptr) {
-        const AdapterStats stats = m_context.adapter->stats();
-        m_commandBar->setEndpoint(protocolKindToString(stats.kind),
-                                  QStringLiteral("127.0.0.1"),
-                                  stats.extra.value(QStringLiteral("port")).toInt(0),
-                                  m_context.adapter->state() == AdapterState::Running);
+    const QVector<const EndpointInfo *> endpoints =
+        m_bundle.endpointsFor(ProtocolKind::Modbus, true);
+    bool anyRunning = false;
+    if (m_context.adapters != nullptr) {
+        for (IProtocolAdapter *adapter : *m_context.adapters) {
+            if (adapter != nullptr && adapter->state() == AdapterState::Running) {
+                anyRunning = true;
+                break;
+            }
+        }
+    }
+    if (!endpoints.isEmpty()) {
+        m_commandBar->setEndpoint(QStringLiteral("modbus"), endpoints.first()->bindAddress,
+                                  endpoints.first()->port, anyRunning);
+    } else if (m_commandBar != nullptr) {
+        m_commandBar->setEndpoint(QStringLiteral("modbus"), QString(), 0, false);
     }
 
     refreshStatus();
@@ -468,14 +480,35 @@ void MainWindow::refreshStatus()
     if (m_status == nullptr)
         return;
 
-    if (m_context.adapter != nullptr) {
-        const AdapterStats stats = m_context.adapter->stats();
-        m_status->setEndpoint(adapterStateToString(m_context.adapter->state()));
-        m_status->setClients(stats.activeClients,
-                             stats.extra.value(QStringLiteral("maxConnections")).toInt(0));
-        m_status->setCounters(stats.framesRx, stats.framesTx, stats.errorFrames,
-                              static_cast<int>(m_frameModel->rowCount()));
+    int runningCount = 0;
+    int activeClients = 0;
+    int maxConnections = 0;
+    quint64 framesRx = 0;
+    quint64 framesTx = 0;
+    quint64 errorFrames = 0;
+    if (m_context.adapters != nullptr) {
+        for (IProtocolAdapter *adapter : *m_context.adapters) {
+            if (adapter == nullptr)
+                continue;
+            if (adapter->state() == AdapterState::Running)
+                ++runningCount;
+            const AdapterStats stats = adapter->stats();
+            activeClients += stats.activeClients;
+            maxConnections += stats.extra.value(QStringLiteral("maxConnections")).toInt(0);
+            framesRx += stats.framesRx;
+            framesTx += stats.framesTx;
+            errorFrames += stats.errorFrames;
+        }
     }
+
+    const int endpointCount = m_bundle.endpointsFor(ProtocolKind::Modbus, true).size();
+    m_status->setEndpoint(runningCount > 0
+                              ? QStringLiteral("运行 %1/%2").arg(runningCount).arg(endpointCount)
+                              : QStringLiteral("停止"));
+    m_status->setClients(activeClients, maxConnections);
+    m_status->setCounters(static_cast<int>(framesRx), static_cast<int>(framesTx),
+                          static_cast<int>(errorFrames),
+                          static_cast<int>(m_frameModel->rowCount()));
 }
 
 void MainWindow::onExportFrames()
@@ -508,6 +541,45 @@ void MainWindow::onThemeToggle()
     if (m_commandBar)
         m_commandBar->setDarkTheme(m_dark);
     applyTokens();
+}
+
+void MainWindow::openDeviceManager()
+{
+    DeviceManagerDialog dialog(m_bundle, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    applyDeviceBundle(dialog.bundle());
+}
+
+void MainWindow::applyDeviceBundle(const ConfigBundle &next)
+{
+    QString path = m_bundle.sourcePath;
+    if (path.isEmpty()) {
+        path = QFileDialog::getSaveFileName(
+            this, QStringLiteral("保存设备配置"), QStringLiteral("devices.json"),
+            QStringLiteral("JSON 配置 (*.json);;所有文件 (*)"));
+        if (path.isEmpty())
+            return;
+    }
+
+    const auto saved = next.saveToFile(path);
+    if (!saved.ok()) {
+        QMessageBox::warning(this, QStringLiteral("配置未保存"), saved.error().toString());
+        return;
+    }
+
+    if (m_context.applyBundle) {
+        const auto applied = m_context.applyBundle(next);
+        if (!applied.ok()) {
+            QMessageBox::warning(
+                this, QStringLiteral("配置已保存"),
+                QStringLiteral("配置已写盘，但运行时切换失败：\n%1\n\n请重启程序后生效。")
+                    .arg(applied.error().toString()));
+            return;
+        }
+    }
+
+    setBundle(next);
 }
 
 } // namespace protosim::ui

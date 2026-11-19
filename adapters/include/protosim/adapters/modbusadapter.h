@@ -96,6 +96,10 @@ public:
     /// 把配置包的 modbus 绑定翻成接口层的 Binding 列表。
     static QVector<Binding> bindingsFromBundle(const ConfigBundle &bundle);
 
+    /// P1：只取属于该端点 unitIds 的绑定，供「一个设备一个端口」装配。
+    static QVector<Binding> bindingsFromBundle(const ConfigBundle &bundle,
+                                               const EndpointInfo &endpoint);
+
     quint16 listenPort() const;
     int activeClients() const;
 

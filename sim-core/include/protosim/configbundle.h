@@ -18,6 +18,10 @@ struct Device
     QString name;
     QString description;
     QString type;
+
+    // P1：一个设备对应一个协议端点；老配置缺字段时回落到第一个同协议端点。
+    QString endpointId;
+    bool enabled = true;
 };
 
 struct ScenarioMeta
@@ -31,12 +35,14 @@ struct ScenarioMeta
 
 struct EndpointInfo
 {
+    QString id; // P1：老配置缺字段时由 build 生成稳定 id
     ProtocolKind protocol = ProtocolKind::Modbus;
     QString transport; // tcp / rtu（Modbus）；其余协议留空
     QString bindAddress = QStringLiteral("127.0.0.1");
     int port = 0;
     int maxConnections = 8;
     QVector<int> unitIds;
+    bool enabled = true;
     QJsonObject raw;
 };
 
@@ -91,7 +97,9 @@ public:
 
     const Signal *signalById(const QString &signalId) const;
     const Device *deviceById(const QString &deviceId) const;
+    const EndpointInfo *endpointById(const QString &endpointId) const;
     const EndpointInfo *endpointFor(ProtocolKind kind) const;
+    QVector<const EndpointInfo *> endpointsFor(ProtocolKind kind, bool enabledOnly = false) const;
     QVector<Signal> signalsOfDevice(const QString &deviceId) const;
     bool controlApiEnabled() const;
 

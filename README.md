@@ -1,6 +1,6 @@
 # ProtoSim — 工业协议服务端模拟器（暂定名）
 
-> **当前状态：P0 已落地可运行。** `sim-core` / Modbus TCP 服务端 / 统一写回管线 / 报文日志 / Widgets+QML 界面全部就位，`ctest` 9 项全绿、`--selftest` 9 项通过、绿色 zip 已能产出。P1 起的内容（RTU、多 unit、MQTT、SQLite、故障注入）尚未开始。
+> **当前状态：P0 已落地可运行；P1 第一阶段实施中。** `sim-core` / Modbus TCP 服务端 / 统一写回管线 / 报文日志 / Widgets+QML 界面全部就位，`ctest` 原 9 项、`--selftest` 9 项、绿色 zip 已能产出。当前分支 `feat/p1-device-management` 正在做虚拟设备/端点管理（端口配置、新增/删除/启用、JSON 持久化），新增的 `tst_devicemanager` 待全量验证。RTU、MQTT、SQLite、故障注入仍在后续阶段。
 
 > 决策依据：`docs/SERVER_SIMULATOR_PROPOSAL.md`（v0.1 立项方案）、`docs/TECH_STACK_DECISIONS.md`（v0.5 技术基线与依赖决策）、`docs/P0_PLAN.md`（P0 任务与验收）。
 
@@ -135,15 +135,15 @@ build\bin\ProtoSim.exe --selftest
 > ⚠️ **MSBuild 的坑**：如果环境里同时存在 `HTTPS_PROXY` 和 `https_proxy`（不少代理工具会这么设），
 > Windows 上这两个变量名不区分大小写，MSBuild 会直接崩在
 > `System.ArgumentException: 已添加项。字典中的关键字:"HTTPS_PROXY"`。
-> 构建前把重复项去掉即可（cmd 里 `set https_proxy=`，bash 里 `env -u https_proxy -u http_proxy cmake --build ...`）。
+> 推荐直接用 `tools\check.bat`，它会先清掉这些重复变量再构建；不必手动逐个 unset。
 
 **测试 / 自检 / 校验**：
 
 | 命令 | 内容 |
 | --- | --- |
-| `bash tools/check.sh` | **提交前敲这个**：配置包校验 → 编译（WERROR，与 CI 同款参数）→ ctest → `--selftest`，一条命令全绿才算可提交 |
-| `bash tools/check.sh --fast` | 跳过 CMake 配置（没动 `CMakeLists.txt` 时用） |
-| `ctest --test-dir build -C Release` | L1 纯逻辑 + L2 假主站 E2E，共 9 个测试程序 |
+| `tools\check.bat` | **提交前敲这个，Windows 原生入口，不需要 bash/WSL**：配置包校验 → 编译（WERROR，与 CI 同款参数）→ ctest → `--selftest`，一条命令全绿才算可提交 |
+| `tools\check.bat -Fast` | 跳过 CMake 配置（没动 `CMakeLists.txt` 时用） |
+| `ctest --test-dir build -C Release` | L1 纯逻辑 + L2 假主站 E2E，P0 共 9 个测试程序；P1 新增 `tst_devicemanager` 后应为 10 个（待验证） |
 | `build\bin\ProtoSim.exe --selftest` | 9 项内置自检，退出码 0 表示全通过 |
 | `python tools/validate_config.py` | 配置包 JSON Schema 校验 |
 
@@ -152,7 +152,7 @@ build\bin\ProtoSim.exe --selftest
 ```bat
 git switch main && git pull
 git switch -c feat/p1-rtu          :: 每件事一个短分支
-bash tools/check.sh                :: 本地先过一遍，别让 CI 当第一道关
+tools\check.bat                    :: 本地先过一遍，别让 CI 当第一道关
 git add -A && git commit -m "..."
 git push -u origin feat/p1-rtu     :: 然后开 PR，CI 跑在 PR 上
 :: PR 页面：等 Windows 作业绿 -> Squash and merge -> 删分支
@@ -222,7 +222,7 @@ ProtoSim/
 | 阶段 | 内容 | 验收口径 |
 | --- | --- | --- |
 | **P0** | `sim-core`、Qt UI 骨架（Widgets + QML 局部）、Modbus TCP 服务端、常量/正弦仿真、报文日志、单测 | 启动模拟器 → FieldLink 连 1502 读到正弦温度；FC16 写 → FC03 回读一致 |
-| **P1** | Modbus RTU + 多 unit/多设备、点表 CSV/JSON 导入导出、异常注入、SQLite 冷数据、MQTT 设备侧 + 内置 mini Broker、HTTP 控制 API | FieldLink MQTT 测试脚本跑通；故障注入可脚本化 |
+| **P1** | 第一阶段：虚拟设备/端点管理（端口配置、新增/删除/启用、JSON 持久化、热切换）；后续：Modbus RTU + 多 unit、点表 CSV/JSON 导入导出、异常注入、SQLite 冷数据、MQTT 设备侧 + 内置 mini Broker、HTTP 控制 API | 新增设备后独立端口可连、停用后不监听、删除后配置清除；后续 FieldLink MQTT 测试脚本跑通 |
 | **P2** | 104 Worker（lib60870-C 2.4.1）：总召唤、突发上送、SBO、时钟同步、k/w 参数；场景回放 | 第三方 104 主站完成总召唤 + 遥控闭环；Worker 崩溃不影响 UI |
 | **P3** | 61850 Worker：SCL 导入、MMS 报告/控制、数据集；GOOSE/SV 视需求 | 与 61850 客户端互认、报告触发 |
 
@@ -246,7 +246,7 @@ Linux 版本在 P0 之后单独立项。**P0 的 CI 只跑 Windows x64 + MSVC**�
 
 | 项 | 说明 |
 | --- | --- |
-| P0 已落地、P1 未开始 | 当前只有 Modbus TCP 单协议闭环；RTU、多 unit、MQTT、SQLite、故障注入均为 P1+ |
+| P0 已落地、P1 设备管理实施中 | 当前只有 Modbus TCP 单协议闭环；P1 先做虚拟设备/端点管理，RTU、MQTT、SQLite、故障注入仍为后续项 |
 | **Qt 6.6.3 已 EOL** | 非 LTS、开源支持 2024-04-02 结束、无安全补丁；**已决定知情接受、暂不升级**，待 6.12 稳定后按 §3.5 五条判定标准于阶段边界切换；开源版 LTS 后续补丁为商业专属，以在线安装器实际可见版本为准 |
 | lib60870 版本红线 | 必须 2.4.1+；2.4.0 及更早存在高危 CVE |
 | TLS 默认关闭 | mbedTLS 2.28 线已停止维护，P2 默认不编 TLS、不引入该库 |
@@ -268,6 +268,7 @@ Linux 版本在 P0 之后单独立项。**P0 的 CI 只跑 Windows x64 + MSVC**�
 - `docs/P0_PLAN.md` — P0 任务拆解与 19 条验收用例
 - `docs/P0_OPEN_QUESTIONS.md` — P0 落地中的冲突、偏离与待拍板事项
 - `docs/design/` — 界面改版设计稿（静态稿 + 可交互原型）与落地记录
+- `docs/P1_DEVICE_MANAGEMENT.md` — P1 第一阶段虚拟设备/端点管理规格、边界与验收
 
 **P0 已落地**：`sim-core` 数据模型 / 确定性仿真 / 配置包校验 / Modbus TCP（8 功能码 + 异常码）/ 统一写回管线 / 报文日志 / UI 骨架 / 三层测试 / `--selftest` / 绿色包全部完成。
 落地过程中遇到的规格冲突与偏离，逐条记录在 `docs/P0_OPEN_QUESTIONS.md`（含 5 条待拍板项）。

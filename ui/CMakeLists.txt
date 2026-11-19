@@ -12,6 +12,7 @@ add_library(protosim_ui STATIC
     include/protosim/ui/commandbar.h
     include/protosim/ui/signalrail.h
     include/protosim/ui/statusstrip.h
+    include/protosim/ui/devicemanagerdialog.h
     include/protosim/ui/mainwindow.h
 
     src/theme.cpp
@@ -21,6 +22,7 @@ add_library(protosim_ui STATIC
     src/commandbar.cpp
     src/signalrail.cpp
     src/statusstrip.cpp
+    src/devicemanagerdialog.cpp
     src/mainwindow.cpp
 
     qml.qrc

@@ -17,6 +17,7 @@ add_library(protosim_core STATIC
     include/protosim/databank.h
     include/protosim/result.h
     include/protosim/configbundle.h
+    include/protosim/devicemanager.h
     include/protosim/curve.h
     include/protosim/simulationengine.h
     include/protosim/iprotocoladapter.h
@@ -31,6 +32,7 @@ add_library(protosim_core STATIC
     src/byteorder.cpp
     src/databank.cpp
     src/configbundle.cpp
+    src/devicemanager.cpp
     src/curve.cpp
     src/simulationengine.cpp
     src/adaptertypes.cpp

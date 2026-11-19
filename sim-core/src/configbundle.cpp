@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
@@ -106,6 +107,52 @@ const QStringList &faultTypes()
     return types;
 }
 
+/// P0 配置没有 endpoint.id；这里按协议+序号生成稳定 id，保证老配置升级后
+/// device.endpointId 能引用到确定的端点，不需要用户手改 JSON。
+QString generatedEndpointId(const QJsonObject &object, int index)
+{
+    ProtocolKind kind = ProtocolKind::Modbus;
+    protocolKindFromString(object.value(QStringLiteral("protocol")).toString(), &kind);
+    if (kind == ProtocolKind::Modbus) {
+        const QString transport = object.value(QStringLiteral("transport")).toString();
+        return QStringLiteral("modbus-%1-%2")
+            .arg(transport.isEmpty() ? QStringLiteral("endpoint") : transport)
+            .arg(index + 1);
+    }
+    return QStringLiteral("%1-%2").arg(protocolKindToString(kind)).arg(index + 1);
+}
+
+QString endpointIdOf(const QJsonObject &object, int index)
+{
+    const QString explicitId = object.value(QStringLiteral("id")).toString();
+    return explicitId.isEmpty() ? generatedEndpointId(object, index) : explicitId;
+}
+
+/// 结构化字段与 raw 是两份视图：raw 负责保真透传，结构化字段负责 UI/运行时。
+/// 任何修改端点核心字段的路径都必须经这里回写，否则 saveToFile 会写回旧值。
+void syncEndpointRaw(EndpointInfo *endpoint)
+{
+    QJsonObject raw = endpoint->raw;
+    raw.insert(QStringLiteral("id"), endpoint->id);
+    raw.insert(QStringLiteral("enabled"), endpoint->enabled);
+
+    if (endpoint->protocol == ProtocolKind::Modbus) {
+        raw.insert(QStringLiteral("protocol"), protocolKindToString(endpoint->protocol));
+        raw.insert(QStringLiteral("transport"), endpoint->transport.isEmpty()
+                                                    ? QStringLiteral("tcp")
+                                                    : endpoint->transport);
+        raw.insert(QStringLiteral("bindAddress"), endpoint->bindAddress);
+        raw.insert(QStringLiteral("port"), endpoint->port);
+        raw.insert(QStringLiteral("maxConnections"), endpoint->maxConnections);
+        QJsonArray unitIds;
+        for (int unitId : endpoint->unitIds)
+            unitIds.append(unitId);
+        raw.insert(QStringLiteral("unitIds"), unitIds);
+    }
+
+    endpoint->raw = raw;
+}
+
 /// 判断 script 字段到底是 JSEngine 源码还是配置文件路径。
 /// 含代码特征字符时按源码处理，不做路径穿越检查（源码本来就不是路径）。
 bool looksLikeScriptSource(const QString &text)
@@ -131,8 +178,8 @@ public:
     {
         Error error;
         if (!checkSchemaVersion(&error) || !checkMeta(&error) || !checkDevices(&error)
-            || !checkEndpoints(&error) || !checkSignals(&error) || !checkFaults(&error)
-            || !checkControlApi(&error) || !checkPathEscapes(&error)
+            || !checkEndpoints(&error) || !checkEndpointRefs(&error) || !checkSignals(&error)
+            || !checkFaults(&error) || !checkControlApi(&error) || !checkPathEscapes(&error)
             || !checkAddressOverlap(&error)) {
             return Result<void>::failure(error);
         }
@@ -240,6 +287,22 @@ private:
                 *error = schemaError(path + QStringLiteral(".name"), QStringLiteral("设备 name 必填"));
                 return false;
             }
+            const QJsonValue endpointId = device.value(QStringLiteral("endpointId"));
+            if (!endpointId.isUndefined() && !isNonEmptyString(endpointId)) {
+                *error = schemaError(path + QStringLiteral(".endpointId"),
+                                     QStringLiteral("endpointId 必须是非空字符串"));
+                return false;
+            }
+            if (isNonEmptyString(endpointId))
+                m_deviceEndpointIds.insert(endpointId.toString().trimmed());
+
+            const QJsonValue enabled = device.value(QStringLiteral("enabled"));
+            if (!enabled.isUndefined() && !enabled.isBool()) {
+                *error = schemaError(path + QStringLiteral(".enabled"),
+                                     QStringLiteral("enabled 必须是布尔值"));
+                return false;
+            }
+
             const QString id = device.value(QStringLiteral("id")).toString();
             if (seen.contains(id)) {
                 *error = semanticError(path + QStringLiteral(".id"),
@@ -263,6 +326,7 @@ private:
         }
 
         const QJsonArray endpoints = value.toArray();
+        QHash<QString, QString> listenKeys;
         for (int i = 0; i < endpoints.size(); ++i) {
             const QString path = QStringLiteral("endpoints[%1]").arg(i);
             if (!endpoints.at(i).isObject()) {
@@ -279,6 +343,27 @@ private:
                 return false;
             }
 
+            const QJsonValue endpointId = endpoint.value(QStringLiteral("id"));
+            if (!endpointId.isUndefined() && !isNonEmptyString(endpointId)) {
+                *error = schemaError(path + QStringLiteral(".id"),
+                                     QStringLiteral("端点 id 必须是非空字符串"));
+                return false;
+            }
+            const QString effectiveId = endpointIdOf(endpoint, i);
+            if (m_endpointIds.contains(effectiveId)) {
+                *error = semanticError(path + QStringLiteral(".id"),
+                                       QStringLiteral("端点 id \"%1\" 重复").arg(effectiveId));
+                return false;
+            }
+            m_endpointIds.insert(effectiveId);
+
+            const QJsonValue enabled = endpoint.value(QStringLiteral("enabled"));
+            if (!enabled.isUndefined() && !enabled.isBool()) {
+                *error = schemaError(path + QStringLiteral(".enabled"),
+                                     QStringLiteral("enabled 必须是布尔值"));
+                return false;
+            }
+
             const QJsonValue port = endpoint.value(QStringLiteral("port"));
             if (!port.isUndefined()
                 && (!isInteger(port) || port.toDouble() < 1 || port.toDouble() > 65535)) {
@@ -286,6 +371,16 @@ private:
                                      QStringLiteral("端口必须是 1~65535"));
                 return false;
             }
+
+            QString bindAddress = QStringLiteral("127.0.0.1");
+            const QJsonValue bind = endpoint.value(QStringLiteral("bindAddress"));
+            if (!bind.isUndefined() && !isNonEmptyString(bind)) {
+                *error = schemaError(path + QStringLiteral(".bindAddress"),
+                                     QStringLiteral("bindAddress 必须是非空字符串"));
+                return false;
+            }
+            if (isNonEmptyString(bind))
+                bindAddress = bind.toString().trimmed();
 
             if (kind == ProtocolKind::Modbus) {
                 const QString transport = endpoint.value(QStringLiteral("transport")).toString();
@@ -309,9 +404,38 @@ private:
                 return false;
             }
 
+            const bool endpointEnabled = enabled.isUndefined() || enabled.toBool();
+            if (endpointEnabled && port.isDouble() && port.toInt() > 0) {
+                const QString listenKey = QStringLiteral("%1|%2")
+                                              .arg(bindAddress)
+                                              .arg(port.toInt());
+                if (listenKeys.contains(listenKey)) {
+                    *error = semanticError(
+                        path + QStringLiteral(".port"),
+                        QStringLiteral("端点 \"%1\" 与 \"%2\" 监听地址端口冲突：%3:%4")
+                            .arg(listenKeys.value(listenKey), effectiveId, bindAddress)
+                            .arg(port.toInt()));
+                    return false;
+                }
+                listenKeys.insert(listenKey, effectiveId);
+            }
+
             m_endpointKinds.insert(static_cast<int>(kind));
         }
 
+        return true;
+    }
+
+    bool checkEndpointRefs(Error *error)
+    {
+        for (const QString &endpointId : m_deviceEndpointIds) {
+            if (!m_endpointIds.contains(endpointId)) {
+                *error = semanticError(
+                    QStringLiteral("devices.endpointId"),
+                    QStringLiteral("设备引用了不存在的端点 \"%1\"").arg(endpointId));
+                return false;
+            }
+        }
         return true;
     }
 
@@ -677,6 +801,8 @@ private:
     const QJsonObject &m_root;
     QString m_baseDir;
     QSet<QString> m_deviceIds;
+    QSet<QString> m_deviceEndpointIds;
+    QSet<QString> m_endpointIds;
     QSet<int> m_endpointKinds;
 };
 
@@ -752,6 +878,8 @@ Result<ConfigBundle> ConfigBundle::build(const QJsonObject &root,
         device.name = object.value(QStringLiteral("name")).toString();
         device.description = object.value(QStringLiteral("description")).toString();
         device.type = object.value(QStringLiteral("type")).toString();
+        device.endpointId = object.value(QStringLiteral("endpointId")).toString();
+        device.enabled = object.value(QStringLiteral("enabled")).toBool(true);
         bundle.devices.append(device);
     }
 
@@ -810,6 +938,7 @@ Result<ConfigBundle> ConfigBundle::build(const QJsonObject &root,
         EndpointInfo endpoint;
         protocolKindFromString(object.value(QStringLiteral("protocol")).toString(),
                                &endpoint.protocol);
+        endpoint.id = endpointIdOf(object, static_cast<int>(bundle.endpoints.size()));
         endpoint.transport = object.value(QStringLiteral("transport")).toString();
         if (object.contains(QStringLiteral("bindAddress")))
             endpoint.bindAddress = object.value(QStringLiteral("bindAddress")).toString();
@@ -817,8 +946,16 @@ Result<ConfigBundle> ConfigBundle::build(const QJsonObject &root,
         endpoint.maxConnections = object.value(QStringLiteral("maxConnections")).toInt(8);
         for (const QJsonValue &unitId : object.value(QStringLiteral("unitIds")).toArray())
             endpoint.unitIds.append(unitId.toInt());
+        endpoint.enabled = object.value(QStringLiteral("enabled")).toBool(true);
         endpoint.raw = object;
+        syncEndpointRaw(&endpoint);
         bundle.endpoints.append(endpoint);
+    }
+
+    // 老配置没有 device.endpointId；P0 场景只有一个 Modbus 端点，直接回落即可。
+    for (Device &device : bundle.devices) {
+        if (device.endpointId.isEmpty() && !bundle.endpoints.isEmpty())
+            device.endpointId = bundle.endpoints.first().id;
     }
 
     const QJsonArray faults = root.value(QStringLiteral("faults")).toArray();
@@ -887,6 +1024,9 @@ QJsonObject ConfigBundle::toJson() const
             object.insert(QStringLiteral("description"), device.description);
         if (!device.type.isEmpty())
             object.insert(QStringLiteral("type"), device.type);
+        if (!device.endpointId.isEmpty())
+            object.insert(QStringLiteral("endpointId"), device.endpointId);
+        object.insert(QStringLiteral("enabled"), device.enabled);
         deviceArray.append(object);
     }
     root.insert(QStringLiteral("devices"), deviceArray);
@@ -1012,6 +1152,17 @@ const Device *ConfigBundle::deviceById(const QString &deviceId) const
     return nullptr;
 }
 
+const EndpointInfo *ConfigBundle::endpointById(const QString &endpointId) const
+{
+    if (endpointId.isEmpty())
+        return nullptr;
+    for (const EndpointInfo &endpoint : endpoints) {
+        if (endpoint.id == endpointId)
+            return &endpoint;
+    }
+    return nullptr;
+}
+
 const EndpointInfo *ConfigBundle::endpointFor(ProtocolKind kind) const
 {
     for (const EndpointInfo &endpoint : endpoints) {
@@ -1019,6 +1170,19 @@ const EndpointInfo *ConfigBundle::endpointFor(ProtocolKind kind) const
             return &endpoint;
     }
     return nullptr;
+}
+
+QVector<const EndpointInfo *> ConfigBundle::endpointsFor(ProtocolKind kind, bool enabledOnly) const
+{
+    QVector<const EndpointInfo *> out;
+    for (const EndpointInfo &endpoint : endpoints) {
+        if (endpoint.protocol != kind)
+            continue;
+        if (enabledOnly && !endpoint.enabled)
+            continue;
+        out.append(&endpoint);
+    }
+    return out;
 }
 
 QVector<Signal> ConfigBundle::signalsOfDevice(const QString &deviceId) const

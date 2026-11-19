@@ -29,6 +29,9 @@
 #include <QMessageBox>
 
 #include <cstdio>
+#include <functional>
+#include <memory>
+#include <vector>
 
 namespace {
 
@@ -119,48 +122,88 @@ int main(int argc, char *argv[])
         QMessageBox::critical(nullptr, QStringLiteral("ProtoSim 启动失败"), message);
         return 1;
     }
-    const protosim::ConfigBundle bundle = loaded.value();
+    // P1：当前生效配置可变；设备管理器每次成功热切换后更新，失败时用它回滚。
+    protosim::ConfigBundle activeBundle = loaded.value();
 
     protosim::DataBank bank;
     protosim::WritePipeline pipeline(&bank);
     protosim::TelemetryLog telemetryLog(5000);
     protosim::EventBus bus;
     protosim::SimulationEngine engine(&bank);
-    protosim::ModbusTcpAdapter adapter(&bank, &pipeline, &telemetryLog);
 
-    const auto populated = bundle.populate(&bank);
-    if (!populated.ok()) {
+    // P1：一个启用端点一个 ModbusTcpAdapter，彼此端口独立。
+    // 用 unique_ptr 固定对象地址，EventBus 注册的就是这个稳定地址。
+    std::vector<std::unique_ptr<protosim::ModbusTcpAdapter>> endpointAdapters;
+    QVector<protosim::IProtocolAdapter *> activeAdapters;
+
+    auto stopAdapters = [&](std::vector<std::unique_ptr<protosim::ModbusTcpAdapter>> &list) {
+        for (auto &adapter : list) {
+            bus.unregisterAdapter(adapter.get());
+            adapter->stop();
+        }
+        list.clear();
+        activeAdapters.clear();
+    };
+
+    auto startAdapters =
+        [&](const protosim::ConfigBundle &next,
+            std::vector<std::unique_ptr<protosim::ModbusTcpAdapter>> &out)
+        -> protosim::Result<void> {
+        const QVector<const protosim::EndpointInfo *> endpoints =
+            next.endpointsFor(protosim::ProtocolKind::Modbus, true);
+        for (const protosim::EndpointInfo *endpoint : endpoints) {
+            if (endpoint->transport != QLatin1String("tcp"))
+                continue;
+
+            auto adapter = std::make_unique<protosim::ModbusTcpAdapter>(&bank, &pipeline,
+                                                                        &telemetryLog);
+            // 协议写入的时标与仿真时钟同源（INTERFACES §8）。
+            adapter->setClockSource([&engine] { return engine.virtualTimeMs(); });
+            bus.registerAdapter(adapter.get());
+            adapter->bind(protosim::ModbusTcpAdapter::bindingsFromBundle(next, *endpoint));
+
+            protosim::EndpointConfig endpointConfig;
+            endpointConfig.kind = endpoint->protocol;
+            endpointConfig.raw = endpoint->raw;
+
+            const auto started = adapter->start(endpointConfig);
+            if (!started.ok()) {
+                bus.unregisterAdapter(adapter.get());
+                adapter->stop();
+                return started;
+            }
+            out.push_back(std::move(adapter));
+        }
+        return {};
+    };
+
+    auto repopulate = [&](const protosim::ConfigBundle &next) -> protosim::Result<void> {
+        bank.reset();
+        const auto populated = next.populate(&bank);
+        if (!populated.ok())
+            return populated;
+        return engine.load(next);
+    };
+
+    const auto initialPopulate = repopulate(activeBundle);
+    if (!initialPopulate.ok()) {
         QMessageBox::critical(nullptr, QStringLiteral("ProtoSim 启动失败"),
-                              populated.error().toString());
+                              initialPopulate.error().toString());
         return 1;
     }
 
-    engine.load(bundle);
-
-    // 协议写入的时标与仿真时钟同源（INTERFACES §8）
-    adapter.setClockSource([&engine] { return engine.virtualTimeMs(); });
-
     bus.attachDataBank(&bank);
-    bus.registerAdapter(&adapter);
 
-    adapter.bind(protosim::ModbusTcpAdapter::bindingsFromBundle(bundle));
-
-    const protosim::EndpointInfo *modbusEndpoint =
-        bundle.endpointFor(protosim::ProtocolKind::Modbus);
-    if (modbusEndpoint != nullptr) {
-        protosim::EndpointConfig endpointConfig;
-        endpointConfig.kind = protosim::ProtocolKind::Modbus;
-        endpointConfig.raw = modbusEndpoint->raw;
-
-        const auto started = adapter.start(endpointConfig);
-        if (!started.ok()) {
-            const QString message = QStringLiteral("Modbus 端点启动失败：\n%1")
-                                        .arg(started.error().toString());
-            ::fputs(message.toUtf8().constData(), stderr);
-            QMessageBox::critical(nullptr, QStringLiteral("ProtoSim 启动失败"), message);
-            return 1;
-        }
+    const auto initialStart = startAdapters(activeBundle, endpointAdapters);
+    if (!initialStart.ok()) {
+        const QString message = QStringLiteral("Modbus 端点启动失败：\n%1")
+                                    .arg(initialStart.error().toString());
+        ::fputs(message.toUtf8().constData(), stderr);
+        QMessageBox::critical(nullptr, QStringLiteral("ProtoSim 启动失败"), message);
+        return 1;
     }
+    for (auto &adapter : endpointAdapters)
+        activeAdapters.append(adapter.get());
 
     const bool darkTheme = parser.value(themeOption) != QLatin1String("light");
     protosim::ui::ThemeBridge themeBridge;
@@ -172,10 +215,51 @@ int main(int argc, char *argv[])
     context.log = &telemetryLog;
     context.bus = &bus;
     context.engine = &engine;
-    context.adapter = &adapter;
+    context.adapters = &activeAdapters;
+
+    // 设备管理器保存配置后调用：先停旧端点，再重建实时库/引擎/端点；
+    // 任一步失败都回滚到当前生效配置，尽量不让界面停在半切换状态。
+    context.applyBundle = [&](const protosim::ConfigBundle &next) -> protosim::Result<void> {
+        const bool wasRunning =
+            engine.state() == protosim::SimulationEngine::State::Running;
+
+        stopAdapters(endpointAdapters);
+
+        auto restore = [&]() {
+            (void)repopulate(activeBundle);
+            (void)startAdapters(activeBundle, endpointAdapters);
+            for (auto &adapter : endpointAdapters)
+                activeAdapters.append(adapter.get());
+            if (wasRunning)
+                engine.start();
+        };
+
+        const auto populated = repopulate(next);
+        if (!populated.ok()) {
+            restore();
+            return populated;
+        }
+
+        std::vector<std::unique_ptr<protosim::ModbusTcpAdapter>> nextAdapters;
+        const auto started = startAdapters(next, nextAdapters);
+        if (!started.ok()) {
+            stopAdapters(nextAdapters);
+            restore();
+            return started;
+        }
+
+        endpointAdapters.swap(nextAdapters);
+        activeBundle = next;
+        activeAdapters.clear();
+        for (auto &adapter : endpointAdapters)
+            activeAdapters.append(adapter.get());
+        if (wasRunning)
+            engine.start();
+        return {};
+    };
 
     protosim::ui::MainWindow window(context, &themeBridge);
-    window.setBundle(bundle);
+    window.setBundle(activeBundle);
     window.setDarkTheme(darkTheme);
     if (parser.value(tabOption) == QLatin1String("curve"))
         window.showCurveTab();

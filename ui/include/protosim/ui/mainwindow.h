@@ -12,6 +12,8 @@
 
 #include <QMainWindow>
 
+#include <functional>
+
 class QQuickWidget;
 class QTableView;
 class QTabWidget;
@@ -40,7 +42,10 @@ public:
         TelemetryLog *log = nullptr;
         EventBus *bus = nullptr;
         SimulationEngine *engine = nullptr;
-        IProtocolAdapter *adapter = nullptr;
+
+        // P1：端点数量可变，且设备管理器要能触发运行时重建。
+        QVector<IProtocolAdapter *> *adapters = nullptr;
+        std::function<Result<void>(const ConfigBundle &)> applyBundle;
     };
 
     MainWindow(const Context &context, ThemeBridge *theme, QWidget *parent = nullptr);
@@ -65,6 +70,8 @@ private:
     void onTick(qint64 virtualTimeMs, qint64 tickCount);
     void onExportFrames();
     void onThemeToggle();
+    void openDeviceManager();
+    void applyDeviceBundle(const ConfigBundle &next);
 
     Context m_context;
     ThemeBridge *m_theme = nullptr;
