@@ -46,3 +46,11 @@ protosim_add_test(tst_pipeline
     tst_pipeline.cpp
 )
 target_link_libraries(tst_pipeline PRIVATE protosim_core)
+
+protosim_add_test(tst_devicemanager
+    tst_devicemanager.cpp
+)
+target_link_libraries(tst_devicemanager PRIVATE protosim_core)
+target_compile_definitions(tst_devicemanager PRIVATE
+    PROTOSIM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)

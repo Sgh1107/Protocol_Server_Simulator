@@ -141,6 +141,12 @@ CommandBar::CommandBar(QWidget *parent)
     chipLayout->addWidget(m_chipAddr);
     layout->addWidget(chip);
 
+    auto *devicesButton = new QPushButton(QStringLiteral("设备"), this);
+    devicesButton->setObjectName(QStringLiteral("ghostButton"));
+    devicesButton->setCursor(Qt::PointingHandCursor);
+    devicesButton->setToolTip(QStringLiteral("管理虚拟设备、监听端口与启用状态"));
+    layout->addWidget(devicesButton);
+
     auto *exportButton = new QPushButton(QStringLiteral("导出报文"), this);
     exportButton->setObjectName(QStringLiteral("ghostButton"));
     exportButton->setCursor(Qt::PointingHandCursor);
@@ -154,6 +160,7 @@ CommandBar::CommandBar(QWidget *parent)
     connect(m_runButton, &QPushButton::clicked, this, &CommandBar::runRequested);
     connect(m_pauseButton, &QPushButton::clicked, this, &CommandBar::pauseRequested);
     connect(m_stepButton, &QPushButton::clicked, this, &CommandBar::stepRequested);
+    connect(devicesButton, &QPushButton::clicked, this, &CommandBar::devicesRequested);
     connect(exportButton, &QPushButton::clicked, this, &CommandBar::exportRequested);
     connect(m_themeButton, &QPushButton::clicked, this, &CommandBar::themeToggleRequested);
 

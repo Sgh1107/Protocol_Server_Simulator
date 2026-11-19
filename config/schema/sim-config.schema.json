@@ -67,7 +67,9 @@
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
         "description": { "type": "string" },
-        "type": { "type": "string", "description": "设备类型，自由文本，如 IED / RTU / PLC" }
+        "type": { "type": "string", "description": "设备类型，自由文本，如 IED / RTU / PLC" },
+        "endpointId": { "type": "string", "minLength": 1, "description": "P1：指向 endpoints[].id，缺省时回落到第一个同协议端点" },
+        "enabled": { "type": "boolean", "default": true, "description": "P1：停用设备时其端点不再对外监听" }
       }
     },
     "range": {
@@ -237,6 +239,8 @@
       "additionalProperties": false,
       "properties": {
         "protocol": { "const": "modbus" },
+        "id": { "type": "string", "minLength": 1, "description": "P1：端点稳定 id，缺省时由构建层生成" },
+        "enabled": { "type": "boolean", "default": true },
         "transport": { "enum": ["tcp", "rtu"] },
         "bindAddress": { "type": "string", "default": "127.0.0.1" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 1502 },
@@ -255,6 +259,8 @@
       "additionalProperties": false,
       "properties": {
         "protocol": { "const": "iec104" },
+        "id": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean", "default": true },
         "bindAddress": { "type": "string", "default": "127.0.0.1" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 2404 },
         "k": { "type": "integer", "minimum": 1, "default": 12 },
@@ -273,6 +279,8 @@
       "additionalProperties": false,
       "properties": {
         "protocol": { "const": "mqtt" },
+        "id": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean", "default": true },
         "broker": { "enum": ["external", "builtin"], "description": "builtin 为联调/故障注入专用，默认关闭" },
         "host": { "type": "string", "default": "127.0.0.1" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 1883 },
@@ -289,6 +297,8 @@
       "additionalProperties": false,
       "properties": {
         "protocol": { "const": "iec61850" },
+        "id": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean", "default": true },
         "bindAddress": { "type": "string", "default": "127.0.0.1" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 102 },
         "iedName": { "type": "string" },

@@ -30,6 +30,7 @@ Q_SIGNALS:
     void speedChanged(double multiplier);
     void exportRequested();
     void themeToggleRequested();
+    void devicesRequested();
 
 private:
     QPushButton *m_runButton = nullptr;

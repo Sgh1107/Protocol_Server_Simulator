@@ -91,15 +91,30 @@ QString presetPath()
     return QString();
 }
 
-/// 走系统分配一个空闲端口，避免自检和用户正在跑的 1502 抢端口。
+/// 自检需要一对端口：对外监听 port，适配器内部回环用 port + 1000。
+/// 不能直接让系统分配临时端口：Windows 临时端口通常从 49152 起，
+/// 加 1000 会越过 65535，内部服务端必然绑定失败。
+bool portPairFree(quint16 port)
+{
+    QTcpServer external;
+    QTcpServer internal;
+    if (!external.listen(QHostAddress::LocalHost, port))
+        return false;
+    if (!internal.listen(QHostAddress::LocalHost,
+                         static_cast<quint16>(port + 1000))) {
+        external.close();
+        return false;
+    }
+    return true;
+}
+
 quint16 freePort()
 {
-    QTcpServer probe;
-    if (!probe.listen(QHostAddress::LocalHost, 0))
-        return 0;
-    const quint16 port = probe.serverPort();
-    probe.close();
-    return port;
+    for (quint16 port = 21000; port < 21200; ++port) {
+        if (portPairFree(port))
+            return port;
+    }
+    return 0;
 }
 
 bool pump(const std::function<bool()> &predicate, int timeoutMs)
@@ -388,6 +403,8 @@ int runSelfTest()
     report(8, QStringLiteral("Modbus 端点启停与 FC16->FC03 回读"), [&] {
         if (configPath.isEmpty())
             return fail(QStringLiteral("没有可用配置"));
+        if (port == 0)
+            return fail(QStringLiteral("找不到可用的端口对（对外端口 + 1000）"));
         if (!engine.load(bundle).ok())
             return fail(QStringLiteral("引擎装载失败"));
         if (!adapter.bind(ModbusTcpAdapter::bindingsFromBundle(bundle)).ok())
